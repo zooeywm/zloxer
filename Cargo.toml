@@ -1,6 +1,10 @@
 [package]
-name = "zloxer"
+name    = "zloxer"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow    = "1.0"
+thiserror = "2.0"
+palc      = "0.0"
+bon       = "3.8"

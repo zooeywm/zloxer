@@ -7,9 +7,10 @@ pub struct List<T> {
 	tail: Link<T>,
 }
 
-// Node doesn't need to implement Drop because memory is managed by Box through List.
-// When a node is removed via pop_front/pop_back, Box::from_raw converts the raw pointer
-// back to a Box, which automatically drops the node and its fields when it goes out of scope.
+// Node doesn't need to implement Drop because memory is managed by Box through
+// List. When a node is removed via pop_front/pop_back, Box::from_raw converts
+// the raw pointer back to a Box, which automatically drops the node and its
+// fields when it goes out of scope.
 struct Node<T> {
 	data: T,
 	next: Link<T>,
@@ -18,9 +19,7 @@ struct Node<T> {
 
 impl<T> Node<T> {
 	fn new(data: T) -> NonNull<Self> {
-		unsafe {
-			NonNull::new_unchecked(Box::into_raw(Box::new(Node { data, prev: None, next: None })))
-		}
+		unsafe { NonNull::new_unchecked(Box::into_raw(Box::new(Node { data, prev: None, next: None }))) }
 	}
 }
 
@@ -126,8 +125,9 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
 
 #[cfg(test)]
 mod test {
-	use super::List;
 	use std::rc::Rc;
+
+	use super::List;
 
 	#[test]
 	fn basics() {
@@ -222,7 +222,8 @@ mod test {
 	fn stress_test() {
 		let mut list = List::new();
 
-		// Test alternating operations: push_front then pop_front, then push_back then pop_back
+		// Test alternating operations: push_front then pop_front, then push_back then
+		// pop_back
 		for i in 0..1e6 as u64 {
 			list.push_front(i);
 			assert_eq!(list.pop_front(), Some(i));

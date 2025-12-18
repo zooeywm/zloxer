@@ -1,3 +1,15 @@
+use palc::Parser;
+use zloxer::cli::*;
+
 fn main() {
-    println!("Hello, world!");
+	let loxer = zloxer::Loxer;
+
+	match Cli::parse().mode {
+		Mode::File { path } => {
+			if let Err(e) = loxer.run_file(&path) {
+				eprintln!("{e}");
+			}
+		}
+		Mode::Repl => loxer.run_prompt(),
+	}
 }
