@@ -7,7 +7,7 @@ use crate::scanner::Scanner;
 pub struct Loxer;
 
 impl Loxer {
-	pub fn run_file(&self, path: &Path) -> crate::Result<()> {
+	pub fn run_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
 		let source = read_to_string(path).context("Failed open source file")?;
 		self.run(&source)
 	}
@@ -64,6 +64,6 @@ mod tests {
 		result = loxer.run(" ( ) ");
 		assert!(result.is_ok());
 		result = loxer.run("@");
-		assert!(result.is_ok());
+		assert!(result.is_err());
 	}
 }

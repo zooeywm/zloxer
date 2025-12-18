@@ -9,7 +9,7 @@ pub enum LoxError {
 	#[error(transparent)]
 	ScanErrors(#[from] ScanErrors),
 	#[error("{0}")]
-	Text(&'static str),
+	Text(String),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -35,8 +35,8 @@ impl Display for ScanErrors {
 	}
 }
 
-impl From<&'static str> for LoxError {
-	fn from(s: &'static str) -> Self { LoxError::Text(s) }
+impl From<String> for LoxError {
+	fn from(s: String) -> Self { LoxError::Text(s) }
 }
 
 #[derive(Debug)]

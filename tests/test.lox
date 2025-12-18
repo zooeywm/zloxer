@@ -1,3 +1,6 @@
 // First Lox program
 // There are no parentheses around the string because print is a built-in statement, and not a library function.
-print "Hello, world!";
+// print "Hello, world!";
+(){},.      -+;*!!====<<=>>=/     
+()>>>="This is a 
+string"

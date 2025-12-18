@@ -39,9 +39,9 @@ pub struct Scanner<'a> {
 	line:    usize,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Token<'a> {
-	r#type: TokenType,
+	r#type: TokenType<'a>,
 	lexeme: &'a str,
 	line:   usize,
 }
@@ -68,9 +68,8 @@ impl<'a> Scanner<'a> {
 	fn is_at_end(&self) -> bool { self.current >= self.source.len() }
 
 	fn scan_token(&mut self) -> crate::Result<()> {
-		let next_char = self.source.chars().nth(self.current).context("Scan out of bound")?;
-		self.current += 1;
-		let line = self.line;
+		let next_char = self.advance()?;
+		#[rustfmt::skip]
 		let r#type = match next_char {
 			'(' => LeftParen,
 			')' => RightParen,
@@ -81,23 +80,87 @@ impl<'a> Scanner<'a> {
 			'-' => Minus,
 			'+' => Plus,
 			';' => Semicolon,
-			'/' => Slash,
 			'*' => Star,
+			'!' => if self.match_next('=')? { BangEqual } else { Bang },
+			'=' => if self.match_next('=')? { EqualEqual } else { Equal },
+			'<' => if self.match_next('=')? { LessEqual } else { Less },
+			'>' => if self.match_next('=')? { GreaterEqual } else { Greater },
+            '/' => if self.match_next('/')? {
+                        while self.peek()? != '\n' && !self.is_at_end() { self.advance()?; }
+                        Comment
+                    } else { Slash },
+            ' ' => EmptyChar,
+            '\r'=> EmptyChar,
+            '\t'=> EmptyChar,
+            '\n'=> { self.line += 1; NewLine }
+            '"' => StringLiteral(self.string()?),
 			_ => {
-				return Err("Unsupported character '{next_char}' for TokenType conversion".into());
+				return Err(format!("Unsupported character '{next_char}' for TokenType conversion").into());
 			}
 		};
 		let lexeme =
 			self.source.get(self.start..self.current).context("slice indices must be on char boundaries")?;
-		self.tokens.push(Token { r#type, lexeme, line });
+		let line = self.line;
+		if !r#type.is_ignored() {
+			self.tokens.push(Token { r#type, lexeme, line });
+		}
 		Ok(())
+	}
+
+	fn match_next(&mut self, expected: char) -> crate::Result<bool> {
+		if self.is_at_end() {
+			return Ok(false);
+		}
+		if self.source.chars().nth(self.current).context("Scan out of bound")? != expected {
+			return Ok(false);
+		}
+		self.current += 1;
+		Ok(true)
+	}
+
+	fn advance(&mut self) -> crate::Result<char> {
+		let ch = self.source.chars().nth(self.current).context("Scan out of bound")?;
+		self.current += 1;
+		Ok(ch)
+	}
+
+	fn peek(&self) -> crate::Result<char> {
+		if self.is_at_end() {
+			return Ok('\0');
+		}
+		Ok(self.source.chars().nth(self.current).context("Scan out of bound")?)
+	}
+
+	fn string(&mut self) -> crate::Result<&'a str> {
+		while self.peek()? != '"' && !self.is_at_end() {
+			if self.peek()? == '\n' {
+				self.line += 1
+			}
+			self.advance()?;
+		}
+
+		if self.is_at_end() {
+			return Err("Unterminated String".to_string().into());
+		}
+
+		self.advance()?; // The closing "
+
+		let ret = self
+			.source
+			.get(self.start + 1..self.current - 1)
+			.context("Slice indices must be on char boundaries")?;
+		Ok(ret)
 	}
 }
 
-#[derive(Debug, Default)]
-pub enum TokenType {
-	#[default]
-	Unknown,
+#[derive(Debug)]
+pub enum TokenType<'a> {
+	/// New Line Character `\n`.
+	NewLine,
+	/// Empty Character: ` `, `\r`, `\t`.
+	EmptyChar,
+	/// Comment `//`
+	Comment,
 	/// Left parenthesis `(`.
 	LeftParen,
 	/// Right parenthesis `)`.
@@ -137,9 +200,9 @@ pub enum TokenType {
 	/// Less than or equal `<=`.
 	LessEqual,
 	/// Identifier, e.g. variable or function name.
-	Identifier(String),
+	Identifier(&'a str),
 	/// String literal, e.g. `"hello"`.
-	StringLiteral(String),
+	StringLiteral(&'a str),
 	/// Number literal, e.g. `123.45`.
 	NumberLiteral(f64),
 	/// Logical AND keyword.
@@ -176,4 +239,10 @@ pub enum TokenType {
 	While,
 	/// End of file/input.
 	Eof,
+}
+
+impl TokenType<'_> {
+	pub fn is_ignored(&self) -> bool {
+		matches!(self, TokenType::EmptyChar | TokenType::NewLine | TokenType::Comment)
+	}
 }
