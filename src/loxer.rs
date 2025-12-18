@@ -47,3 +47,23 @@ impl Loxer {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn run_string() {
+		let loxer = Loxer;
+		let mut result = loxer.run("");
+		assert!(result.is_ok());
+		result = loxer.run("(");
+		assert!(result.is_ok());
+		result = loxer.run("(){}");
+		assert!(result.is_ok());
+		result = loxer.run(" ( ) ");
+		assert!(result.is_ok());
+		result = loxer.run("@");
+		assert!(result.is_ok());
+	}
+}

@@ -22,6 +22,8 @@
 use TokenType::*;
 use anyhow::Context;
 
+use crate::error::ScanErrors;
+
 #[derive(Default)]
 pub struct Scanner<'a> {
 	/// User input source code
@@ -48,10 +50,16 @@ impl<'a> Scanner<'a> {
 	pub fn new(source: &'a str) -> Self { Self { source, ..Default::default() } }
 
 	pub fn scan_tokens(&'a mut self) -> crate::Result<&'a [Token<'a>]> {
+		let mut scan_errors = ScanErrors::new();
 		while !self.is_at_end() {
 			// We are at the beginning of the next lexeme.
 			self.start = self.current;
-			self.scan_token()?;
+			if let Err(e) = self.scan_token() {
+				scan_errors.push(self.line, e.to_string());
+			}
+		}
+		if !scan_errors.is_empty() {
+			return Err(scan_errors.into());
 		}
 		self.tokens.push(Token { r#type: Eof, lexeme: "", line: self.line });
 		Ok(self.tokens.as_slice())
@@ -62,10 +70,25 @@ impl<'a> Scanner<'a> {
 	fn scan_token(&mut self) -> crate::Result<()> {
 		let next_char = self.source.chars().nth(self.current).context("Scan out of bound")?;
 		self.current += 1;
-		let r#type = TokenType::try_from(next_char)?;
+		let line = self.line;
+		let r#type = match next_char {
+			'(' => LeftParen,
+			')' => RightParen,
+			'{' => LeftBrace,
+			'}' => RightBrace,
+			',' => Comma,
+			'.' => Dot,
+			'-' => Minus,
+			'+' => Plus,
+			';' => Semicolon,
+			'/' => Slash,
+			'*' => Star,
+			_ => {
+				return Err("Unsupported character '{next_char}' for TokenType conversion".into());
+			}
+		};
 		let lexeme =
 			self.source.get(self.start..self.current).context("slice indices must be on char boundaries")?;
-		let line = self.line;
 		self.tokens.push(Token { r#type, lexeme, line });
 		Ok(())
 	}
@@ -153,25 +176,4 @@ pub enum TokenType {
 	While,
 	/// End of file/input.
 	Eof,
-}
-
-impl TryFrom<char> for TokenType {
-	type Error = anyhow::Error;
-
-	fn try_from(value: char) -> Result<Self, Self::Error> {
-		Ok(match value {
-			'(' => LeftParen,
-			')' => RightParen,
-			'{' => LeftBrace,
-			'}' => RightBrace,
-			',' => Comma,
-			'.' => Dot,
-			'-' => Minus,
-			'+' => Plus,
-			';' => Semicolon,
-			'/' => Slash,
-			'*' => Star,
-			_ => anyhow::bail!("Unsupported character '{value}' for TokenType conversion"),
-		})
-	}
 }
