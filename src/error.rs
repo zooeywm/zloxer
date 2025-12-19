@@ -1,46 +1,54 @@
-use std::fmt::Display;
-
 pub type Result<T> = std::result::Result<T, LoxError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum LoxError {
 	#[error("CompilerInternalError{0}")]
 	CompileInternalError(#[from] anyhow::Error),
-	#[error(transparent)]
-	ScanErrors(#[from] ScanErrors),
+	#[error("ScanErrors:\n{}", display_scan_errors(.0))]
+	ScanErrors(Vec<ScanError>),
 	#[error("{0}")]
-	Text(String),
+	ScanError(#[from] ScanError),
 }
 
 #[derive(thiserror::Error, Debug)]
-pub struct ScanErrors(Vec<ScanError>);
-
-impl ScanErrors {
-	pub fn new() -> Self { Self(vec![]) }
-
-	pub fn push(&mut self, line: usize, message: impl Into<String>) {
-		self.0.push(ScanError { line, message: message.into() });
-	}
-
-	pub fn is_empty(&self) -> bool { self.0.is_empty() }
+#[error("line {line}: {type}")]
+pub struct ScanError {
+	line:   usize,
+	r#type: ScanErrorType,
 }
 
-impl Display for ScanErrors {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		writeln!(f, "There are ScanErrors:")?;
-		for error in &self.0 {
-			writeln!(f, "line {}: {}", error.line, error.message)?;
-		}
-		Ok(())
-	}
-}
-
-impl From<String> for LoxError {
-	fn from(s: String) -> Self { LoxError::Text(s) }
+impl ScanError {
+	pub fn new(line: usize, r#type: ScanErrorType) -> Self { Self { line, r#type } }
 }
 
 #[derive(Debug)]
-struct ScanError {
-	line:    usize,
-	message: String,
+pub enum ScanErrorType {
+	UnterminatedLineComment,
+	UnterminatedBlockComment,
+	UnexpectedCharacter(char),
+	UnterminatedString,
+}
+
+impl std::fmt::Display for ScanErrorType {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		use ScanErrorType::*;
+		match self {
+			UnterminatedLineComment => {
+				write!(f, "Unterminated line comment")
+			}
+			UnterminatedBlockComment => {
+				write!(f, "Unterminated block comment")
+			}
+			UnexpectedCharacter(c) => {
+				write!(f, "Unexpected character '{c}'")
+			}
+			UnterminatedString => {
+				write!(f, "Unterminated String")
+			}
+		}
+	}
+}
+
+fn display_scan_errors(errors: &[ScanError]) -> String {
+	errors.iter().map(|e| format!("{}", e)).collect::<Vec<String>>().join("\n")
 }

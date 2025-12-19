@@ -22,29 +22,30 @@
 //! We can’t easily detect a `reserved word` until we’ve reached the end of what
 //! might instead be an identifier, this is `maximal munch`.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::Peekable, str::CharIndices};
 
 use TokenType::*;
 use anyhow::Context;
 
-use crate::error::ScanErrors;
+use crate::error::{LoxError::*, ScanError, ScanErrorType::*};
 
 /// A scanner for Lox source code
-#[derive(Default)]
 pub struct Scanner<'a> {
 	/// User input source code
-	source:   &'a str,
-	/// Lexed tokens
-	tokens:   Vec<Token<'a>>,
-	/// Points to the first character in the lexeme being scanned
-	start:    usize,
+	source:      &'a str,
+	/// User input source code
+	source_iter: Peekable<CharIndices<'a>>,
+	/// Points at the beginning of the current lexeme
+	start:       usize,
 	/// Points at the character currently being considered
-	current:  usize,
+	cursor:      usize,
 	/// Tracks what source line `current` is on so we can produce tokens that know
 	/// their location.
-	line:     usize,
+	line:        usize,
+	/// Lexed tokens
+	tokens:      Vec<Token<'a>>,
 	/// Reserved keywords in Lox
-	keywords: HashMap<&'a str, TokenType<'a>>,
+	keywords:    HashMap<&'a str, TokenType<'a>>,
 }
 
 /// A token produced by the scanner
@@ -75,23 +76,33 @@ impl<'a> Scanner<'a> {
 			("var", Var),
 			("while", While),
 		]);
+		let source_iter = source.char_indices().peekable();
 
-		Self { source, keywords, ..Default::default() }
+		Self { source, source_iter, keywords, tokens: vec![], start: 0, cursor: 0, line: 1 }
 	}
 
 	/// Scan all tokens from the source code
 	pub fn scan_tokens(&'a mut self) -> crate::Result<&'a [Token<'a>]> {
-		let mut scan_errors = ScanErrors::new();
-		while !self.is_at_end() {
+		let mut scan_errors = vec![];
+		self.start = 0;
+		self.cursor = 0;
+		while let Some(&(index, _)) = self.source_iter.peek() {
 			// We are at the beginning of the next lexeme.
-			self.start = self.current;
-			if let Err(e) = self.scan_token() {
-				eprintln!("{e}");
-				scan_errors.push(self.line, e.to_string());
+			self.start = index;
+			self.cursor = index;
+			match self.scan_token() {
+				Ok(_) => {}
+				Err(ScanError(e)) => {
+					scan_errors.push(e);
+				}
+				Err(CompileInternalError(e)) => {
+					return Err(e.into());
+				}
+				Err(ScanErrors(e)) => return Err(anyhow::anyhow!("This shall never happen: {e:?}").into()),
 			}
 		}
 		if !scan_errors.is_empty() {
-			return Err(scan_errors.into());
+			return Err(ScanErrors(scan_errors));
 		}
 		self.tokens.push(Token { r#type: Eof, lexeme: "", line: self.line });
 		Ok(self.tokens.as_slice())
@@ -99,7 +110,7 @@ impl<'a> Scanner<'a> {
 
 	/// Scan a single token from the source code
 	fn scan_token(&mut self) -> crate::Result<()> {
-		let next_char = self.advance()?;
+		let next_char = self.advance().context("Unexpected EOF")?;
 		#[rustfmt::skip]
 		let r#type = match next_char {
 			'(' => LeftParen,
@@ -112,139 +123,108 @@ impl<'a> Scanner<'a> {
 			'+' => Plus,
 			';' => Semicolon,
 			'*' => Star,
-			'!' => if self.match_next('=')? { BangEqual } else { Bang },
-			'=' => if self.match_next('=')? { EqualEqual } else { Equal },
-			'<' => if self.match_next('=')? { LessEqual } else { Less },
-			'>' => if self.match_next('=')? { GreaterEqual } else { Greater },
-            '/' => if self.match_next('/')? {
-                        while self.peek()? != '\n' && !self.is_at_end() { self.advance()?; }
-                        Comment
-                   } else { Slash },
+			'!' => if self.match_next('=') { BangEqual } else { Bang },
+			'=' => if self.match_next('=') { EqualEqual } else { Equal },
+			'<' => if self.match_next('=') { LessEqual } else { Less },
+			'>' => if self.match_next('=') { GreaterEqual } else { Greater },
+            '/' => if self.match_next('/') {
+                while self.peek().is_some_and(|c| c!= '\n') { self.advance(); }
+                Comment
+            } else if self.match_next('*') {
+                let mut closed = false;
+                while let Some(c) = self.peek() {
+                    if c == '*' && { self.advance(); self.peek().is_some_and(|c| c == '/') } {
+                        self.advance(); // consume '/'
+                        closed = true;
+                        break;
+                    }
+                    if c == '\n' { self.line += 1; }
+                    self.advance();
+                }
+                if closed { Comment } else { return Err(ScanError::new(self.line, UnterminatedLineComment).into()) }
+            } else { Slash },
             ' ' | '\r' | '\t' => EmptyChar,
             '\n'=> { self.line += 1; NewLine }
             '"' => self.string()?,
-            char if char.is_ascii_digit() => self.number()?,
-            char if char.is_ascii_alphabetic() || char == '_' => self.identifier()?,
-			_ => return Err(format!("Unsupported character '{next_char}' for TokenType conversion").into())
+            c @ char if c.is_ascii_digit() => self.number()?,
+            c @ char if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
+            _ => return Err(ScanError::new(self.line, UnexpectedCharacter(next_char)).into()),
 		};
-		let lexeme = self.get_slice(self.start, self.current)?;
-		let line = self.line;
+
 		if !r#type.is_ignored() {
-			self.tokens.push(Token { r#type, lexeme, line });
+			let lexeme = &self.source[self.start..self.cursor];
+			self.tokens.push(Token { r#type, lexeme, line: self.line });
 		}
+
 		Ok(())
 	}
 }
 
 impl<'a> Scanner<'a> {
-	/// Check if we have reached the end of the source code
-	fn is_at_end(&self) -> bool { self.current >= self.source.chars().count() }
-
+	// /// Check if
+	// fn is_at_end(&self) -> bool { self.current >= self.source.chars().count() }
+	//
 	/// Match the next character if it is the expected one
-	fn match_next(&mut self, expected: char) -> crate::Result<bool> {
-		if self.is_at_end() {
-			return Ok(false);
-		}
-		if self.source.chars().nth(self.current).context("Scan out of bound: match_next")? != expected {
-			return Ok(false);
-		}
-		self.current += 1;
-		Ok(true)
+	fn match_next(&mut self, expected: char) -> bool {
+		matches!(self.peek(), Some(c) if c == expected && { self.advance(); true })
 	}
 
 	/// Advance to the next character
-	fn advance(&mut self) -> crate::Result<char> {
-		let ch = self.source.chars().nth(self.current).context("Scan out of bound: advance")?;
-		self.current += 1;
-		Ok(ch)
+	fn advance(&mut self) -> Option<char> {
+		let (i, c) = self.source_iter.next()?;
+		self.cursor = i + c.len_utf8();
+		Some(c)
 	}
 
 	/// Peek the current character
-	fn peek(&self) -> crate::Result<char> {
-		if self.is_at_end() {
-			return Ok('\0');
-		}
-		Ok(self.source.chars().nth(self.current).context("Scan out of bound: peek")?)
-	}
+	fn peek(&mut self) -> Option<char> { self.source_iter.peek().map(|&(_, c)| c) }
 
 	/// Scan a string literal
 	fn string(&mut self) -> crate::Result<TokenType<'a>> {
-		while self.peek()? != '"' && !self.is_at_end() {
-			if self.peek()? == '\n' {
+		while let Some(c) = self.peek() {
+			if c == '"' {
+				break;
+			}
+			if c == '\n' {
 				self.line += 1
 			}
-			self.advance()?;
+			self.advance();
 		}
 
-		if self.is_at_end() {
-			return Err("Unterminated String".to_string().into());
-		}
-
-		self.advance()?; // The closing "
-
-		let ret = self.get_slice(self.start + 1, self.current - 1)?;
-		Ok(TokenType::StringLiteral(ret))
+		self.peek().ok_or(ScanError::new(self.line, UnterminatedString))?;
+		self.advance(); // The closing "
+		let value = &self.source[self.start + 1..self.cursor - 1];
+		Ok(StringLiteral(value))
 	}
 
 	/// Scan a number literal
 	fn number(&mut self) -> crate::Result<TokenType<'a>> {
-		while self.peek()?.is_ascii_digit() {
-			self.advance()?;
+		while self.peek().is_some_and(|c| c.is_ascii_digit()) {
+			self.advance();
 		}
 
 		// Look for a fractional part.
-		if self.peek()? == '.' && self.peek_second()?.is_ascii_digit() {
-			// Consume the "."
-			self.advance()?;
-
-			while self.peek()?.is_ascii_digit() {
-				self.advance()?;
+		if self.peek() == Some('.') {
+			let mut iter_clone = self.source_iter.clone();
+			iter_clone.next();
+			if iter_clone.peek().is_some_and(|(_, c)| c.is_ascii_digit()) {
+				self.advance();
+				while self.peek().is_some_and(|c| c.is_ascii_digit()) {
+					self.advance();
+				}
 			}
 		}
-
-		let number_str = self.get_slice(self.start, self.current)?;
-		let number_value: f64 = number_str.parse().context("Failed to parse number literal")?;
-		Ok(TokenType::NumberLiteral(number_value))
+		let s = &self.source[self.start..self.cursor];
+		Ok(NumberLiteral(s.parse().context("Failed to parse number literal")?))
 	}
 
-	/// Peek the second character
-	fn peek_second(&self) -> crate::Result<char> {
-		if self.current + 1 >= self.source.chars().count() {
-			return Ok('\0');
+	/// Scan an identifier or keyword
+	fn identifier(&mut self) -> TokenType<'a> {
+		while self.peek().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
+			self.advance();
 		}
-		Ok(self.source.chars().nth(self.current + 1).context("Scan out of bound: peek_second")?)
-	}
-
-	fn identifier(&mut self) -> crate::Result<TokenType<'a>> {
-		while self.peek()?.is_ascii_alphanumeric() || self.peek()? == '_' {
-			self.advance()?;
-		}
-		let text = self.get_slice(self.start, self.current)?;
-		match self.keywords.get(text) {
-			Some(keyword_type) => Ok(keyword_type.clone()),
-			None => Ok(TokenType::Identifier(text)),
-		}
-	}
-
-	fn get_slice(&self, start: usize, end: usize) -> crate::Result<&'a str> {
-		if start > end {
-			return Err(anyhow::anyhow!("Invalid char range [{start}, {end})").into());
-		}
-
-		let mut iter = self.source.char_indices();
-
-		let start_byte =
-			iter.nth(start).map(|(i, _)| i).context(format!("Start index {start} out of char bounds"))?;
-
-		let end_byte = if end == start {
-			start_byte
-		} else {
-			iter.nth(end - start - 1).map(|(i, c)| i + c.len_utf8()).unwrap_or(self.source.len())
-		};
-
-		Ok(self.source.get(start_byte..end_byte).context(format!(
-			"Char slice [{start}, {end}) maps to invalid byte range [{start_byte}, {end_byte})"
-		))?)
+		let text = &self.source[self.start..self.cursor];
+		self.keywords.get(text).cloned().unwrap_or(TokenType::Identifier(text))
 	}
 }
 
@@ -339,7 +319,5 @@ pub enum TokenType<'a> {
 }
 
 impl TokenType<'_> {
-	pub fn is_ignored(&self) -> bool {
-		matches!(self, TokenType::EmptyChar | TokenType::NewLine | TokenType::Comment)
-	}
+	pub fn is_ignored(&self) -> bool { matches!(self, TokenType::EmptyChar | TokenType::NewLine) }
 }
