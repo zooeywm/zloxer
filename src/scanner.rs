@@ -22,18 +22,18 @@
 //! We can’t easily detect a `reserved word` until we’ve reached the end of what
 //! might instead be an identifier, this is `maximal munch`.
 
-use std::{collections::HashMap, iter::Peekable, str::CharIndices};
+use std::{iter::Peekable, str::CharIndices};
 
 use TokenType::*;
 use anyhow::Context;
 
-use crate::error::{LoxError::*, ScanError, ScanErrorType::*};
+use crate::{LoxError::*, LoxResult, ScanError, ScanErrorType::*, ScannerError, ScannerResult};
 
 /// A scanner for Lox source code
 pub struct Scanner<'a> {
 	/// User input source code
 	source:      &'a str,
-	/// User input source code
+	/// User input source code iterator
 	source_iter: Peekable<CharIndices<'a>>,
 	/// Points at the beginning of the current lexeme
 	start:       usize,
@@ -44,8 +44,6 @@ pub struct Scanner<'a> {
 	line:        usize,
 	/// Lexed tokens
 	tokens:      Vec<Token<'a>>,
-	/// Reserved keywords in Lox
-	keywords:    HashMap<&'a str, TokenType<'a>>,
 }
 
 /// A token produced by the scanner
@@ -58,58 +56,37 @@ pub struct Token<'a> {
 
 impl<'a> Scanner<'a> {
 	pub fn new(source: &'a str) -> Self {
-		let keywords = HashMap::from([
-			("and", And),
-			("class", Class),
-			("else", Else),
-			("false", False),
-			("for", For),
-			("fun", Fun),
-			("if", If),
-			("nil", Nil),
-			("or", Or),
-			("print", Print),
-			("return", Return),
-			("super", Super),
-			("this", This),
-			("true", True),
-			("var", Var),
-			("while", While),
-		]);
 		let source_iter = source.char_indices().peekable();
 
-		Self { source, source_iter, keywords, tokens: vec![], start: 0, cursor: 0, line: 1 }
+		Self { source, source_iter, tokens: vec![], start: 0, cursor: 0, line: 1 }
 	}
 
 	/// Scan all tokens from the source code
-	pub fn scan_tokens(&'a mut self) -> crate::Result<&'a [Token<'a>]> {
-		let mut scan_errors = vec![];
-		self.start = 0;
-		self.cursor = 0;
+	pub fn scan_tokens(&'a mut self) -> LoxResult<&'a [Token<'a>]> {
+		let mut scanner_errors = vec![];
 		while let Some(&(index, _)) = self.source_iter.peek() {
 			// We are at the beginning of the next lexeme.
 			self.start = index;
-			self.cursor = index;
+			self.cursor = self.start;
 			match self.scan_token() {
-				Ok(_) => {}
-				Err(ScanError(e)) => {
-					scan_errors.push(e);
+				Err(ScannerError::ScanError(e)) => {
+					scanner_errors.push(e);
 				}
-				Err(CompileInternalError(e)) => {
+				Err(ScannerError::InternalError(e)) => {
 					return Err(e.into());
 				}
-				Err(ScanErrors(e)) => return Err(anyhow::anyhow!("This shall never happen: {e:?}").into()),
+				Ok(_) => {}
 			}
 		}
-		if !scan_errors.is_empty() {
-			return Err(ScanErrors(scan_errors));
+		if !scanner_errors.is_empty() {
+			return Err(ScannerErrors(scanner_errors));
 		}
 		self.tokens.push(Token { r#type: Eof, lexeme: "", line: self.line });
 		Ok(self.tokens.as_slice())
 	}
 
 	/// Scan a single token from the source code
-	fn scan_token(&mut self) -> crate::Result<()> {
+	fn scan_token(&mut self) -> ScannerResult<()> {
 		let next_char = self.advance().context("Unexpected EOF")?;
 		#[rustfmt::skip]
 		let r#type = match next_char {
@@ -141,13 +118,13 @@ impl<'a> Scanner<'a> {
                     if c == '\n' { self.line += 1; }
                     self.advance();
                 }
-                if closed { Comment } else { return Err(ScanError::new(self.line, UnterminatedLineComment).into()) }
+                if closed { Comment } else { return Err(ScanError::new(self.line, UnterminatedBlockComment).into()) }
             } else { Slash },
             ' ' | '\r' | '\t' => EmptyChar,
             '\n'=> { self.line += 1; NewLine }
             '"' => self.string()?,
-            c @ char if c.is_ascii_digit() => self.number()?,
-            c @ char if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
+            c if c.is_ascii_digit() => self.number()?,
+            c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             _ => return Err(ScanError::new(self.line, UnexpectedCharacter(next_char)).into()),
 		};
 
@@ -161,9 +138,6 @@ impl<'a> Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-	// /// Check if
-	// fn is_at_end(&self) -> bool { self.current >= self.source.chars().count() }
-	//
 	/// Match the next character if it is the expected one
 	fn match_next(&mut self, expected: char) -> bool {
 		matches!(self.peek(), Some(c) if c == expected && { self.advance(); true })
@@ -180,7 +154,7 @@ impl<'a> Scanner<'a> {
 	fn peek(&mut self) -> Option<char> { self.source_iter.peek().map(|&(_, c)| c) }
 
 	/// Scan a string literal
-	fn string(&mut self) -> crate::Result<TokenType<'a>> {
+	fn string(&mut self) -> ScannerResult<TokenType<'a>> {
 		while let Some(c) = self.peek() {
 			if c == '"' {
 				break;
@@ -198,7 +172,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	/// Scan a number literal
-	fn number(&mut self) -> crate::Result<TokenType<'a>> {
+	fn number(&mut self) -> ScannerResult<TokenType<'a>> {
 		while self.peek().is_some_and(|c| c.is_ascii_digit()) {
 			self.advance();
 		}
@@ -224,7 +198,7 @@ impl<'a> Scanner<'a> {
 			self.advance();
 		}
 		let text = &self.source[self.start..self.cursor];
-		self.keywords.get(text).cloned().unwrap_or(TokenType::Identifier(text))
+		TokenType::keyword_or_identifier(text)
 	}
 }
 
@@ -318,6 +292,28 @@ pub enum TokenType<'a> {
 	Eof,
 }
 
-impl TokenType<'_> {
+impl<'a> TokenType<'a> {
 	pub fn is_ignored(&self) -> bool { matches!(self, TokenType::EmptyChar | TokenType::NewLine) }
+
+	fn keyword_or_identifier(value: &'a str) -> Self {
+		match value {
+			"and" => TokenType::And,
+			"class" => TokenType::Class,
+			"else" => TokenType::Else,
+			"false" => TokenType::False,
+			"for" => TokenType::For,
+			"fun" => TokenType::Fun,
+			"if" => TokenType::If,
+			"nil" => TokenType::Nil,
+			"or" => TokenType::Or,
+			"print" => TokenType::Print,
+			"return" => TokenType::Return,
+			"super" => TokenType::Super,
+			"this" => TokenType::This,
+			"true" => TokenType::True,
+			"var" => TokenType::Var,
+			"while" => TokenType::While,
+			_ => TokenType::Identifier(value),
+		}
+	}
 }

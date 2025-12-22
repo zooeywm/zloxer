@@ -7,7 +7,7 @@ use crate::scanner::Scanner;
 pub struct Loxer;
 
 impl Loxer {
-	pub fn run_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
+	pub fn run_file<P: AsRef<Path>>(&self, path: P) -> crate::LoxResult<()> {
 		let source = read_to_string(path).context("Failed open source file")?;
 		self.run(&source)
 	}
@@ -40,7 +40,7 @@ impl Loxer {
 }
 
 impl Loxer {
-	fn run(&self, source: &str) -> crate::Result<()> {
+	fn run(&self, source: &str) -> crate::LoxResult<()> {
 		let mut scanner = Scanner::new(source);
 		let tokens = scanner.scan_tokens()?;
 		println!("tokens = {:?}", tokens);
@@ -65,5 +65,38 @@ mod tests {
 		assert!(result.is_ok());
 		result = loxer.run("@");
 		assert!(result.is_err());
+		result = loxer.run("你好");
+		assert!(result.is_err());
+		result = loxer.run(r#""世界""#);
+		assert!(result.is_ok());
+		result = loxer.run("12345");
+		assert!(result.is_ok());
+		result = loxer.run(
+			r#""/* Block
+
+        注释📻 
+        */""#,
+		);
+		assert!(result.is_ok());
+		result = loxer.run(
+			r#"
+            Multi 
+            Line
+                String
+            "#,
+		);
+		assert!(result.is_ok());
+		result = loxer.run(
+			r#"// Comment"#,
+		);
+		assert!(result.is_ok());
+		result = loxer.run(
+			"user",
+		);
+		assert!(result.is_ok());
+		result = loxer.run(
+			"return",
+		);
+		assert!(result.is_ok());
 	}
 }

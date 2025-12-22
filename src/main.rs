@@ -7,7 +7,7 @@ fn main() {
 	match Cli::parse().mode {
 		Mode::File { path } => {
 			if let Err(e) = loxer.run_file(&path) {
-				eprintln!("{e}");
+				eprintln!("Failed run file: {e}");
 			}
 		}
 		Mode::Repl => loxer.run_prompt(),

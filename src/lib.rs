@@ -113,5 +113,5 @@ mod error;
 mod loxer;
 mod scanner;
 
-pub use error::Result;
+pub use error::{LoxError, LoxResult, ScannerResult, scanner::{ScanError, ScanErrorType, ScannerError}};
 pub use loxer::Loxer;
