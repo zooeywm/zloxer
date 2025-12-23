@@ -112,6 +112,7 @@ pub mod cli;
 mod error;
 mod loxer;
 mod scanner;
+mod parser;
 
 pub use error::{LoxError, LoxResult, ScannerResult, scanner::{ScanError, ScanErrorType, ScannerError}};
 pub use loxer::Loxer;

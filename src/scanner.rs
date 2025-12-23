@@ -17,7 +17,7 @@
 //! runtime object that will be used by the interpreter later.
 //!
 //! The rules that determine how a particular language groups characters into
-//! lexemes are called its `lexical grammar`.
+//! lexemes are called its `Lexical grammar`.
 //!
 //! We can’t easily detect a `reserved word` until we’ve reached the end of what
 //! might instead be an identifier, this is `maximal munch`.
@@ -49,9 +49,9 @@ pub struct Scanner<'a> {
 /// A token produced by the scanner
 #[derive(Debug)]
 pub struct Token<'a> {
-	r#type: TokenType<'a>,
-	lexeme: &'a str,
-	line:   usize,
+	pub r#type: TokenType<'a>,
+	pub lexeme: &'a str,
+	pub line:   usize,
 }
 
 impl<'a> Scanner<'a> {
@@ -315,5 +315,46 @@ impl<'a> TokenType<'a> {
 			"while" => TokenType::While,
 			_ => TokenType::Identifier(value),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn scan(input: &str, ok: bool) {
+		let mut scanner = Scanner::new(input);
+		let result = scanner.scan_tokens();
+		assert!(result.is_ok() == ok);
+	}
+
+	#[test]
+	fn scan_tokens() {
+		scan("", true);
+		scan("(", true);
+		scan("(){}", true);
+		scan(" ( ) ", true);
+		scan("@", false);
+		scan("你好", false);
+		scan(r#""世界""#, true);
+		scan("12345", true);
+		scan(
+			r#""/* Block
+        注释📻
+        */""#,
+			true,
+		);
+		scan(
+			r#"
+            Multi
+            Line
+                String
+            "#,
+			true,
+		);
+		scan(r#"// Comment"#, true);
+		scan("/* Unterminated comment ", false);
+		scan("user", true);
+		scan("return", true);
 	}
 }
