@@ -2,6 +2,8 @@
 
 Learn from <https://www.craftinginterpreters.com>
 
+Run `cargo doc --open --document-private-items` to view rustdoc.
+
 ## Concepts
 
 ### Dynamic typing

@@ -22,6 +22,22 @@ pub enum LiteralValue<'a> {
 	Nil,
 }
 
+impl<'a> TryFrom<Token<'a>> for LiteralValue<'a> {
+	type Error = anyhow::Error;
+
+	fn try_from(token: Token<'a>) -> Result<Self, Self::Error> {
+		use crate::scanner::TokenType::*;
+		Ok(match token.r#type {
+			NumberLiteral(n) => LiteralValue::Number(n),
+			StringLiteral(s) => LiteralValue::String(s),
+			True => LiteralValue::Boolean(true),
+			False => LiteralValue::Boolean(false),
+			Nil => LiteralValue::Nil,
+			_ => anyhow::bail!("Cannot convert token {:?} to LiteralValue", token),
+		})
+	}
+}
+
 impl std::fmt::Display for Expression<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
