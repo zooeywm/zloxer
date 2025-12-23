@@ -19,7 +19,6 @@ impl ScanError {
 
 #[derive(Debug)]
 pub enum ScanErrorType {
-	UnterminatedLineComment,
 	UnterminatedBlockComment,
 	UnexpectedCharacter(char),
 	UnterminatedString,
@@ -29,9 +28,6 @@ impl std::fmt::Display for ScanErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		use ScanErrorType::*;
 		match self {
-			UnterminatedLineComment => {
-				write!(f, "Unterminated line comment")
-			}
 			UnterminatedBlockComment => {
 				write!(f, "Unterminated block comment")
 			}

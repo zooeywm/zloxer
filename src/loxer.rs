@@ -2,12 +2,12 @@ use std::{fs::read_to_string, io::Write, path::Path};
 
 use anyhow::Context;
 
-use crate::scanner::Scanner;
+use crate::{LoxError, scanner::Scanner};
 
 pub struct Loxer;
 
 impl Loxer {
-	pub fn run_file<P: AsRef<Path>>(&self, path: P) -> crate::LoxResult<()> {
+	pub fn run_file<P: AsRef<Path>>(&self, path: P) -> Result<(), LoxError> {
 		let source = read_to_string(path).context("Failed open source file")?;
 		self.run(&source)
 	}
@@ -40,7 +40,7 @@ impl Loxer {
 }
 
 impl Loxer {
-	fn run(&self, source: &str) -> crate::LoxResult<()> {
+	fn run(&self, source: &str) -> Result<(), LoxError> {
 		let mut scanner = Scanner::new(source);
 		let tokens = scanner.scan_tokens()?;
 		println!("tokens = {:?}", tokens);

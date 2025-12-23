@@ -33,139 +33,137 @@
 
 mod expression;
 
-use crate::{parser::expression::Expression, scanner::{Token, TokenType}};
+use std::{iter::Peekable, vec::IntoIter};
+
+use anyhow::anyhow;
+
+use crate::{error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::{Expression, LiteralValue}, scanner::{Token, TokenType}};
 
 pub struct Parser<'a> {
-	tokens:  Vec<Token<'a>>,
-	current: usize,
+	tokens: Peekable<IntoIter<Token<'a>>>,
 }
 
 impl<'a> Parser<'a> {
-	pub fn new(tokens: Vec<Token<'a>>) -> Self { Self { tokens, current: 0 } }
+	pub fn new(tokens: Vec<Token<'a>>) -> Self { Self { tokens: tokens.into_iter().peekable() } }
 
-	fn expression(&mut self) -> Expression<'a> { self.equality() }
+	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> { self.equality() }
 
-	fn equality(&mut self) -> Expression<'a> {
-		let mut expression = self.comparison();
+	fn equality(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let mut expression = self.comparison()?;
 
-		while self.match_tokens(&[TokenType::BangEqual, TokenType::EqualEqual]) {
-			let operator = self.previous().clone();
-			let right = self.comparison();
-			expression = Expression::Binary { left: Box::new(expression), operator, right: Box::new(right) };
+		while let Some(operator) = self.match_tokens(&[TokenType::BangEqual, TokenType::EqualEqual])? {
+			let left = expression;
+			let right = self.comparison()?.boxed();
+			expression = Expression::Binary { left, operator, right }.boxed();
 		}
 
-		expression
+		Ok(expression)
 	}
 
-	fn comparison(&mut self) -> Expression<'a> {
-		let mut expression = self.term();
+	fn comparison(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let mut expression = self.term()?;
 
-		while self.match_tokens(&[
+		while let Some(operator) = self.match_tokens(&[
 			TokenType::Greater,
 			TokenType::GreaterEqual,
 			TokenType::Less,
 			TokenType::LessEqual,
-		]) {
-			let operator = self.previous().clone();
-			let right = self.term();
-			expression = Expression::Binary { left: Box::new(expression), operator, right: Box::new(right) };
+		])? {
+			let left = expression;
+			let right = self.term()?.boxed();
+			expression = Expression::Binary { left, operator, right }.boxed();
 		}
 
-		expression
+		Ok(expression)
 	}
 
-	fn term(&mut self) -> Expression<'a> {
-		let mut expression = self.factor();
+	fn term(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let mut expression = self.factor()?;
 
-		while self.match_tokens(&[TokenType::Minus, TokenType::Plus]) {
-			let operator = self.previous().clone();
-			let right = self.factor();
-			expression = Expression::Binary { left: Box::new(expression), operator, right: Box::new(right) };
+		while let Some(operator) = self.match_tokens(&[TokenType::Minus, TokenType::Plus])? {
+			let left = expression;
+			let right = self.factor()?.boxed();
+			expression = Expression::Binary { left, operator, right }.boxed();
 		}
 
-		expression
+		Ok(expression)
 	}
 
-	fn factor(&mut self) -> Expression<'a> {
-		let mut expression = self.unary();
+	fn factor(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let mut expression = self.unary()?;
 
-		while self.match_tokens(&[TokenType::Slash, TokenType::Star]) {
-			let operator = self.previous().clone();
-			let right = self.unary();
-			expression = Expression::Binary { left: Box::new(expression), operator, right: Box::new(right) };
+		while let Some(operator) = self.match_tokens(&[TokenType::Slash, TokenType::Star])? {
+			let left = expression;
+			let right = self.unary()?;
+			expression = Expression::Binary { left, operator, right }.boxed();
 		}
 
-		expression
+		Ok(expression)
 	}
 
-	fn unary(&mut self) -> Expression<'a> {
-		if self.match_tokens(&[TokenType::Bang, TokenType::Minus]) {
-			let operator = self.previous().clone();
-			let right = self.unary();
-			return Expression::Unary { operator, right: Box::new(right) };
+	fn unary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		if let Some(operator) = self.match_tokens(&[TokenType::Bang, TokenType::Minus])? {
+			let right = self.unary()?;
+			return Ok(Expression::Unary { operator, right }.boxed());
 		}
 
 		self.primary()
 	}
 
 	/// 补全 primary
-	fn primary(&mut self) -> Expression<'a> {
-		if self.match_tokens(&[TokenType::False]) {
-			return Expression::Literal(crate::parser::expression::LiteralValue::Boolean(false));
+	fn primary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		if self.match_tokens(&[TokenType::False])?.is_some() {
+			return Ok(Expression::Literal(LiteralValue::Boolean(false)).boxed());
 		}
-		if self.match_tokens(&[TokenType::True]) {
-			return Expression::Literal(crate::parser::expression::LiteralValue::Boolean(true));
+		if self.match_tokens(&[TokenType::True])?.is_some() {
+			return Ok(Expression::Literal(LiteralValue::Boolean(true)).boxed());
 		}
-		if self.match_tokens(&[TokenType::Nil]) {
-			return Expression::Literal(crate::parser::expression::LiteralValue::Nil);
-		}
-
-		if let TokenType::NumberLiteral(n) = self.peek().r#type {
-			self.advance();
-			return Expression::Literal(crate::parser::expression::LiteralValue::Number(n));
+		if self.match_tokens(&[TokenType::Nil])?.is_some() {
+			return Ok(Expression::Literal(LiteralValue::Nil).boxed());
 		}
 
-		if let TokenType::StringLiteral(s) = self.peek().r#type {
-			self.advance();
-			return Expression::Literal(crate::parser::expression::LiteralValue::String(s));
+		if let TokenType::NumberLiteral(n) = self.peek()?.r#type {
+			self.advance()?;
+			return Ok(Expression::Literal(LiteralValue::Number(n)).boxed());
 		}
 
-		if self.match_tokens(&[TokenType::LeftParen]) {
-			let expr = self.expression();
-			self.match_tokens(&[TokenType::RightParen]);
-			return Expression::Grouping { expression: Box::new(expr) };
+		if let TokenType::StringLiteral(s) = self.peek()?.r#type {
+			self.advance()?;
+			return Ok(Expression::Literal(LiteralValue::String(s)).boxed());
 		}
-		panic!("Expected expression.");
+
+		if self.match_tokens(&[TokenType::LeftParen])?.is_some() {
+			let expr = self.expression()?;
+			if self.match_tokens(&[TokenType::RightParen])?.is_none() {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::UnterminatedParenthesis).into());
+			}
+			return Ok(Expression::Grouping(expr).boxed());
+		}
+		let token = self.peek()?;
+		Err(ParseError::new(token.line, ParseErrorType::ExpectedExpression).into())
 	}
 
-	fn match_tokens(&mut self, types: &[TokenType<'a>]) -> bool {
+	fn match_tokens(&mut self, types: &[TokenType<'a>]) -> Result<Option<Token<'a>>, ParserError> {
 		for token_type in types {
-			if self.check(token_type) {
-				self.advance();
-				return true;
+			if self.check(token_type)? {
+				return Ok(Some(self.advance()?));
 			}
 		}
-		false
+		Ok(None)
 	}
 
-	fn check(&self, token_type: &TokenType) -> bool {
-		if self.is_at_end() {
-			return false;
+	fn check(&mut self, token_type: &TokenType) -> Result<bool, ParserError> {
+		match self.tokens.peek() {
+			Some(token) => Ok(&token.r#type == token_type),
+			None => Err(anyhow!("Unexpected EOF").into()),
 		}
-
-		&self.peek().r#type == token_type
 	}
 
-	fn advance(&mut self) -> &Token<'a> {
-		if !self.is_at_end() {
-			self.current += 1;
-		}
-		self.previous()
+	fn advance(&mut self) -> Result<Token<'a>, ParserError> {
+		self.tokens.next().ok_or_else(|| anyhow!("Unexpected EOF").into())
 	}
 
-	fn is_at_end(&self) -> bool { self.peek().r#type == TokenType::Eof }
-
-	fn peek(&self) -> &Token<'a> { &self.tokens[self.current] }
-
-	fn previous(&self) -> &Token<'a> { &self.tokens[self.current - 1] }
+	fn peek(&mut self) -> Result<&Token<'a>, ParserError> {
+		self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF").into())
+	}
 }

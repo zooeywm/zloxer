@@ -1,9 +1,7 @@
+pub mod parser;
 pub mod scanner;
 
-use crate::{ScanError, ScannerError};
-
-pub type LoxResult<T> = std::result::Result<T, LoxError>;
-pub type ScannerResult<T> = std::result::Result<T, ScannerError>;
+use crate::{ScanError, error::parser::ParserError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum LoxError {
@@ -11,6 +9,8 @@ pub enum LoxError {
 	InternalError(#[from] anyhow::Error),
 	#[error("ScannerErrors:\n{}", display_scan_errors(.0))]
 	ScannerErrors(Vec<ScanError>),
+	#[error("{0}")]
+	ParseError(#[from] ParserError),
 }
 
 fn display_scan_errors(errors: &[ScanError]) -> String {

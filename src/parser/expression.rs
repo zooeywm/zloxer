@@ -7,7 +7,11 @@ pub enum Expression<'a> {
 	Literal(LiteralValue<'a>),
 	Unary { operator: Token<'a>, right: Box<Expression<'a>> },
 	Binary { left: Box<Expression<'a>>, operator: Token<'a>, right: Box<Expression<'a>> },
-	Grouping { expression: Box<Expression<'a>> },
+	Grouping(Box<Expression<'a>>),
+}
+
+impl<'a> Expression<'a> {
+	pub fn boxed(self) -> Box<Self> { Box::new(self) }
 }
 
 #[derive(Debug)]
@@ -24,7 +28,7 @@ impl std::fmt::Display for Expression<'_> {
 			Literal(lit) => write!(f, "{}", lit),
 			Unary { operator, right } => write!(f, "({} {})", operator.lexeme, right),
 			Binary { left, operator, right } => write!(f, "({} {} {})", operator.lexeme, left, right),
-			Grouping { expression } => write!(f, "(group {})", expression),
+			Grouping(expression) => write!(f, "(group {})", expression),
 		}
 	}
 }
@@ -42,20 +46,19 @@ impl std::fmt::Display for LiteralValue<'_> {
 
 #[cfg(test)]
 mod tests {
-	use LiteralValue::*;
-
 	use super::*;
 	use crate::scanner::TokenType::*;
 
 	#[test]
 	fn parse_expressions() {
-		let expression = Binary {
-			left:     Box::new(Unary {
-				operator: Token { r#type: Minus, lexeme: "-", line: 1 },
-				right:    Box::new(Literal(Number(123.))),
-			}),
-			operator: Token { r#type: Star, lexeme: "*", line: 1 },
-			right:    Box::new(Grouping { expression: Box::new(Literal(Number(45.67))) }),
+		let expression = Expression::Binary {
+			left:     Expression::Unary {
+				operator: Token::new(Minus, "-", 1),
+				right:    Expression::Literal(LiteralValue::Number(123.)).boxed(),
+			}
+			.boxed(),
+			operator: Token::new(Star, "*", 1),
+			right:    Expression::Grouping(Expression::Literal(LiteralValue::Number(45.67)).boxed()).boxed(),
 		};
 
 		assert_eq!("(* (- 123) (group 45.67))", expression.to_string());

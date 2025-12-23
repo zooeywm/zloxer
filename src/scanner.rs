@@ -27,7 +27,7 @@ use std::{iter::Peekable, str::CharIndices};
 use TokenType::*;
 use anyhow::Context;
 
-use crate::{LoxError::*, LoxResult, ScanError, ScanErrorType::*, ScannerError, ScannerResult};
+use crate::{LoxError, ScanError, ScanErrorType, ScannerError};
 
 /// A scanner for Lox source code
 pub struct Scanner<'a> {
@@ -54,6 +54,10 @@ pub struct Token<'a> {
 	pub line:   usize,
 }
 
+impl<'a> Token<'a> {
+	pub fn new(r#type: TokenType<'a>, lexeme: &'a str, line: usize) -> Self { Self { r#type, lexeme, line } }
+}
+
 impl<'a> Scanner<'a> {
 	pub fn new(source: &'a str) -> Self {
 		let source_iter = source.char_indices().peekable();
@@ -62,7 +66,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	/// Scan all tokens from the source code
-	pub fn scan_tokens(&'a mut self) -> LoxResult<&'a [Token<'a>]> {
+	pub fn scan_tokens(&'a mut self) -> Result<&'a [Token<'a>], LoxError> {
 		let mut scanner_errors = vec![];
 		while let Some(&(index, _)) = self.source_iter.peek() {
 			// We are at the beginning of the next lexeme.
@@ -79,14 +83,14 @@ impl<'a> Scanner<'a> {
 			}
 		}
 		if !scanner_errors.is_empty() {
-			return Err(ScannerErrors(scanner_errors));
+			return Err(LoxError::ScannerErrors(scanner_errors));
 		}
-		self.tokens.push(Token { r#type: Eof, lexeme: "", line: self.line });
+		self.tokens.push(Token::new(Eof, "", self.line));
 		Ok(self.tokens.as_slice())
 	}
 
 	/// Scan a single token from the source code
-	fn scan_token(&mut self) -> ScannerResult<()> {
+	fn scan_token(&mut self) -> Result<(), ScannerError> {
 		let next_char = self.advance().context("Unexpected EOF")?;
 		#[rustfmt::skip]
 		let r#type = match next_char {
@@ -118,19 +122,19 @@ impl<'a> Scanner<'a> {
                     if c == '\n' { self.line += 1; }
                     self.advance();
                 }
-                if closed { Comment } else { return Err(ScanError::new(self.line, UnterminatedBlockComment).into()) }
+                if closed { Comment } else { return Err(ScanError::new(self.line, ScanErrorType::UnterminatedBlockComment).into()) }
             } else { Slash },
             ' ' | '\r' | '\t' => EmptyChar,
             '\n'=> { self.line += 1; NewLine }
             '"' => self.string()?,
             c if c.is_ascii_digit() => self.number()?,
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
-            _ => return Err(ScanError::new(self.line, UnexpectedCharacter(next_char)).into()),
+            _ => return Err(ScanError::new(self.line, ScanErrorType::UnexpectedCharacter(next_char)).into()),
 		};
 
 		if !r#type.is_ignored() {
 			let lexeme = &self.source[self.start..self.cursor];
-			self.tokens.push(Token { r#type, lexeme, line: self.line });
+			self.tokens.push(Token::new(r#type, lexeme, self.line));
 		}
 
 		Ok(())
@@ -154,7 +158,7 @@ impl<'a> Scanner<'a> {
 	fn peek(&mut self) -> Option<char> { self.source_iter.peek().map(|&(_, c)| c) }
 
 	/// Scan a string literal
-	fn string(&mut self) -> ScannerResult<TokenType<'a>> {
+	fn string(&mut self) -> Result<TokenType<'a>, ScannerError> {
 		while let Some(c) = self.peek() {
 			if c == '"' {
 				break;
@@ -165,31 +169,34 @@ impl<'a> Scanner<'a> {
 			self.advance();
 		}
 
-		self.peek().ok_or(ScanError::new(self.line, UnterminatedString))?;
+		self.peek().ok_or_else(|| ScanError::new(self.line, ScanErrorType::UnterminatedString))?;
 		self.advance(); // The closing "
 		let value = &self.source[self.start + 1..self.cursor - 1];
 		Ok(StringLiteral(value))
 	}
 
 	/// Scan a number literal
-	fn number(&mut self) -> ScannerResult<TokenType<'a>> {
+	fn number(&mut self) -> Result<TokenType<'a>, ScannerError> {
 		while self.peek().is_some_and(|c| c.is_ascii_digit()) {
 			self.advance();
 		}
 
 		// Look for a fractional part.
-		if self.peek() == Some('.') {
-			let mut iter_clone = self.source_iter.clone();
-			iter_clone.next();
-			if iter_clone.peek().is_some_and(|(_, c)| c.is_ascii_digit()) {
+		if self.peek() == Some('.') && self.peek_second().is_some_and(|c| c.is_ascii_digit()) {
+			self.advance(); // consume '.'
+			while self.peek().is_some_and(|c| c.is_ascii_digit()) {
 				self.advance();
-				while self.peek().is_some_and(|c| c.is_ascii_digit()) {
-					self.advance();
-				}
 			}
 		}
+
 		let s = &self.source[self.start..self.cursor];
 		Ok(NumberLiteral(s.parse().context("Failed to parse number literal")?))
+	}
+
+	fn peek_second(&mut self) -> Option<char> {
+		let mut it = self.source_iter.clone();
+		it.next()?; // 跳过当前 peek 的字符
+		it.peek().map(|&(_, c)| c)
 	}
 
 	/// Scan an identifier or keyword
