@@ -47,7 +47,7 @@ pub struct Scanner<'a> {
 }
 
 /// A token produced by the scanner
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token<'a> {
 	pub r#type: TokenType<'a>,
 	pub lexeme: &'a str,
@@ -203,7 +203,7 @@ impl<'a> Scanner<'a> {
 }
 
 /// The different types of tokens in Lox, The copying is lightweight
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType<'a> {
 	Undefined,
 	/// New Line Character `\n`.
