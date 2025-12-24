@@ -19,19 +19,19 @@ impl ParseError {
 
 #[derive(Debug)]
 pub enum ParseErrorType {
-	ExpectedExpression,
 	UnterminatedParenthesis,
+	UnexpectedToken(String),
 }
 
 impl std::fmt::Display for ParseErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		use ParseErrorType::*;
 		match self {
-			ExpectedExpression => {
-				write!(f, "Expected expression")
-			}
 			UnterminatedParenthesis => {
 				write!(f, "Unterminated parenthesis")
+			}
+			UnexpectedToken(e) => {
+				write!(f, "Unexpected token: {e}")
 			}
 		}
 	}

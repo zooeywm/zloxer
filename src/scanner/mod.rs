@@ -21,16 +21,18 @@
 //!
 //! We can’t easily detect a `reserved word` until we’ve reached the end of what
 //! might instead be an identifier, this is `maximal munch`.
+mod token;
 
 use std::{iter::Peekable, str::CharIndices};
 
 use TokenType::*;
 use anyhow::Context;
+pub(crate) use token::*;
 
 use crate::{LoxError, ScanError, ScanErrorType, ScannerError};
 
 /// A scanner for Lox source code
-pub struct Scanner<'a> {
+pub(crate) struct Scanner<'a> {
 	/// User input source code
 	source:      &'a str,
 	/// User input source code iterator
@@ -42,39 +44,27 @@ pub struct Scanner<'a> {
 	/// Tracks what source line `current` is on so we can produce tokens that know
 	/// their location.
 	line:        usize,
-	/// Lexed tokens
-	tokens:      Vec<Token<'a>>,
-}
-
-/// A token produced by the scanner
-#[derive(Debug, Clone)]
-pub struct Token<'a> {
-	pub r#type: TokenType<'a>,
-	pub lexeme: &'a str,
-	pub line:   usize,
-}
-
-impl<'a> Token<'a> {
-	pub fn new(r#type: TokenType<'a>, lexeme: &'a str, line: usize) -> Self { Self { r#type, lexeme, line } }
 }
 
 impl<'a> Scanner<'a> {
 	pub fn new(source: &'a str) -> Self {
 		let source_iter = source.char_indices().peekable();
 
-		Self { source, source_iter, tokens: vec![], start: 0, cursor: 0, line: 1 }
+		Self { source, source_iter, start: 0, cursor: 0, line: 1 }
 	}
 
 	/// Scan all tokens from the source code
-	pub fn scan_tokens(&'a mut self) -> Result<&'a [Token<'a>], LoxError> {
-		let mut scanner_errors = vec![];
+	pub fn scan_tokens(&'a mut self) -> Result<Vec<Token<'a>>, LoxError> {
+		let mut tokens = Vec::new();
+		let mut error_count = 0;
 		while let Some(&(index, _)) = self.source_iter.peek() {
 			// We are at the beginning of the next lexeme.
 			self.start = index;
 			self.cursor = self.start;
-			match self.scan_token() {
+			match self.scan_token(&mut tokens) {
 				Err(ScannerError::ScanError(e)) => {
-					scanner_errors.push(e);
+					eprintln!("Scan error: {}", e);
+					error_count += 1;
 				}
 				Err(ScannerError::InternalError(e)) => {
 					return Err(e.into());
@@ -82,15 +72,15 @@ impl<'a> Scanner<'a> {
 				Ok(_) => {}
 			}
 		}
-		if !scanner_errors.is_empty() {
-			return Err(LoxError::ScannerErrors(scanner_errors));
+		if error_count != 0 {
+			return Err(LoxError::ScannerErrors(error_count));
 		}
-		self.tokens.push(Token::new(Eof, "", self.line));
-		Ok(self.tokens.as_slice())
+		tokens.push(Token::new(Eof, "", self.line));
+		Ok(tokens)
 	}
 
 	/// Scan a single token from the source code
-	fn scan_token(&mut self) -> Result<(), ScannerError> {
+	fn scan_token(&mut self, tokens: &mut Vec<Token<'a>>) -> Result<(), ScannerError> {
 		let next_char = self.advance().context("Unexpected EOF")?;
 		#[rustfmt::skip]
 		let r#type = match next_char {
@@ -134,14 +124,12 @@ impl<'a> Scanner<'a> {
 
 		if !r#type.is_ignored() {
 			let lexeme = &self.source[self.start..self.cursor];
-			self.tokens.push(Token::new(r#type, lexeme, self.line));
+			tokens.push(Token::new(r#type, lexeme, self.line));
 		}
 
 		Ok(())
 	}
-}
 
-impl<'a> Scanner<'a> {
 	/// Match the next character if it is the expected one
 	fn match_next(&mut self, expected: char) -> bool {
 		matches!(self.peek(), Some(c) if c == expected && { self.advance(); true })
@@ -206,122 +194,6 @@ impl<'a> Scanner<'a> {
 		}
 		let text = &self.source[self.start..self.cursor];
 		TokenType::keyword_or_identifier(text)
-	}
-}
-
-/// The different types of tokens in Lox, The copying is lightweight
-#[derive(Debug, Clone, PartialEq)]
-pub enum TokenType<'a> {
-	Undefined,
-	/// New Line Character `\n`.
-	NewLine,
-	/// Empty Character: ` `, `\r`, `\t`.
-	EmptyChar,
-	/// Comment `//` or /* ... */
-	Comment,
-	/// Left parenthesis `(`.
-	LeftParen,
-	/// Right parenthesis `)`.
-	RightParen,
-	/// Left brace `{`.
-	LeftBrace,
-	/// Right brace `}`.
-	RightBrace,
-	/// Comma `,`.
-	Comma,
-	/// Dot `.`.
-	Dot,
-	/// Minus `-`.
-	Minus,
-	/// Plus `+`.
-	Plus,
-	/// Semicolon `;`.
-	Semicolon,
-	/// Slash `/`.
-	Slash,
-	/// Asterisk `*`.
-	Star,
-	/// Bang `!`.
-	Bang,
-	/// Bang equal `!=`.
-	BangEqual,
-	/// Equal `=`.
-	Equal,
-	/// Equal equal `==`.
-	EqualEqual,
-	/// Greater than `>`.
-	Greater,
-	/// Greater than or equal `>=`.
-	GreaterEqual,
-	/// Less than `<`.
-	Less,
-	/// Less than or equal `<=`.
-	LessEqual,
-	/// Identifier, e.g. variable or function name.
-	Identifier(&'a str),
-	/// String literal, e.g. `"hello"`.
-	StringLiteral(&'a str),
-	/// Number literal, e.g. `123.45`.
-	NumberLiteral(f64),
-	/// Logical AND keyword.
-	And,
-	/// Class keyword.
-	Class,
-	/// Else keyword.
-	Else,
-	/// Boolean literal `false`.
-	False,
-	/// Function keyword.
-	Fun,
-	/// For loop keyword.
-	For,
-	/// If statement keyword.
-	If,
-	/// Nil literal (null equivalent).
-	Nil,
-	/// Logical OR keyword.
-	Or,
-	/// Print statement keyword.
-	Print,
-	/// Return statement keyword.
-	Return,
-	/// Super keyword (for inheritance).
-	Super,
-	/// This keyword (current instance reference).
-	This,
-	/// Boolean literal `true`.
-	True,
-	/// Variable declaration keyword.
-	Var,
-	/// While loop keyword.
-	While,
-	/// End of file/input.
-	Eof,
-}
-
-impl<'a> TokenType<'a> {
-	pub fn is_ignored(&self) -> bool { matches!(self, TokenType::EmptyChar | TokenType::NewLine) }
-
-	fn keyword_or_identifier(value: &'a str) -> Self {
-		match value {
-			"and" => TokenType::And,
-			"class" => TokenType::Class,
-			"else" => TokenType::Else,
-			"false" => TokenType::False,
-			"for" => TokenType::For,
-			"fun" => TokenType::Fun,
-			"if" => TokenType::If,
-			"nil" => TokenType::Nil,
-			"or" => TokenType::Or,
-			"print" => TokenType::Print,
-			"return" => TokenType::Return,
-			"super" => TokenType::Super,
-			"this" => TokenType::This,
-			"true" => TokenType::True,
-			"var" => TokenType::Var,
-			"while" => TokenType::While,
-			_ => TokenType::Identifier(value),
-		}
 	}
 }
 

@@ -1,9 +1,14 @@
+//! Expression AST nodes
+//! //! An `Expression` is a tree structure representing code like `-123 *
+//! (45.67)` as nested nodes.
+
 use Expression::*;
 
 use crate::scanner::Token;
 
+/// Expression AST nodes
 #[derive(Debug)]
-pub enum Expression<'a> {
+pub(crate) enum Expression<'a> {
 	Literal(LiteralValue<'a>),
 	Unary { operator: Token<'a>, right: Box<Expression<'a>> },
 	Binary { left: Box<Expression<'a>>, operator: Token<'a>, right: Box<Expression<'a>> },
@@ -11,29 +16,53 @@ pub enum Expression<'a> {
 }
 
 impl<'a> Expression<'a> {
-	pub fn boxed(self) -> Box<Self> { Box::new(self) }
+	// ---------- Literal ----------
+	pub fn literal(value: LiteralValue<'a>) -> Box<Self> { Box::new(Expression::Literal(value)) }
+
+	pub fn number(n: f64) -> Box<Self> { Self::literal(LiteralValue::Number(n)) }
+
+	pub fn string(s: &'a str) -> Box<Self> { Self::literal(LiteralValue::String(s)) }
+
+	pub fn boolean(b: bool) -> Box<Self> { Self::literal(LiteralValue::Boolean(b)) }
+
+	pub fn nil() -> Box<Self> { Self::literal(LiteralValue::Nil) }
+
+	// ---------- Unary ----------
+	pub fn unary(operator: Token<'a>, right: Box<Self>) -> Box<Self> {
+		Box::new(Expression::Unary { operator, right })
+	}
+
+	// ---------- Binary ----------
+	pub fn binary(left: Box<Self>, operator: Token<'a>, right: Box<Self>) -> Box<Self> {
+		Box::new(Expression::Binary { left, operator, right })
+	}
+
+	// ---------- Grouping ----------
+	pub fn grouping(expr: Box<Self>) -> Box<Self> { Box::new(Expression::Grouping(expr)) }
 }
 
+/// Literal values in the AST
 #[derive(Debug)]
-pub enum LiteralValue<'a> {
+pub(crate) enum LiteralValue<'a> {
 	Number(f64),
 	String(&'a str),
 	Boolean(bool),
 	Nil,
 }
 
-impl<'a> TryFrom<Token<'a>> for LiteralValue<'a> {
+impl<'a> TryFrom<Token<'a>> for Expression<'a> {
 	type Error = anyhow::Error;
 
 	fn try_from(token: Token<'a>) -> Result<Self, Self::Error> {
 		use crate::scanner::TokenType::*;
+
 		Ok(match token.r#type {
-			NumberLiteral(n) => LiteralValue::Number(n),
-			StringLiteral(s) => LiteralValue::String(s),
-			True => LiteralValue::Boolean(true),
-			False => LiteralValue::Boolean(false),
-			Nil => LiteralValue::Nil,
-			_ => anyhow::bail!("Cannot convert token {:?} to LiteralValue", token),
+			NumberLiteral(n) => Expression::Literal(LiteralValue::Number(n)),
+			StringLiteral(s) => Expression::Literal(LiteralValue::String(s)),
+			True => Expression::Literal(LiteralValue::Boolean(true)),
+			False => Expression::Literal(LiteralValue::Boolean(false)),
+			Nil => Expression::Literal(LiteralValue::Nil),
+			_ => anyhow::bail!("Cannot convert token {:?} to Expression::Literal", token),
 		})
 	}
 }
@@ -67,17 +96,12 @@ mod tests {
 
 	#[test]
 	fn parse_expressions() {
-		let expression = Expression::Binary {
-			left:     Expression::Unary {
-				operator: Token::new(Minus, "-", 1),
-				right:    Expression::Literal(LiteralValue::Number(123.)).boxed(),
-			}
-			.boxed(),
-			operator: Token::new(Star, "*", 1),
-			right:    Expression::Grouping(Expression::Literal(LiteralValue::Number(45.67)).boxed()).boxed(),
-		};
+		let expression = Expression::binary(
+			Expression::unary(Token::new(Minus, "-", 1), Expression::number(123.0)),
+			Token::new(Star, "*", 1),
+			Expression::grouping(Expression::number(45.67)),
+		);
 
 		assert_eq!("(* (- 123) (group 45.67))", expression.to_string());
-		println!("expression = {}", expression);
 	}
 }
