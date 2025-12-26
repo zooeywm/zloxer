@@ -14,6 +14,7 @@
 //! |Name|Operators|Associates
 //! --|--|--
 //! Comma|,|Left
+//! Ternary|?:|Right
 //! Equality|== !=|Left
 //! Comparison|< > <= >=|Left
 //! Term|+ -|Left
@@ -24,7 +25,8 @@
 //!
 //! ``` BNF
 //! expression     → comma ;
-//! comma          → equality ( "," equality )* ;
+//! comma          → ternary ( "," ternary )* ;
+//! ternary        → equality ( "?" expression ":" ternary )? ;
 //! equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 //! comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 //! term           → factor ( ( "-" | "+" ) factor )* ;
@@ -69,17 +71,32 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse comma expressions.
-	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
-		self.comma()
-	}
+	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> { self.comma() }
 
 	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
-		let mut expr = self.equality()?;
+		let mut expr = self.ternary()?;
 		while matches!(self.peek()?.r#type, Comma) {
 			self.advance()?;
-			expr = Expression::comma(expr, self.equality()?)
+			expr = Expression::comma(expr, self.ternary()?)
 		}
 		Ok(expr)
+	}
+
+	fn ternary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let condition = self.equality()?;
+		if matches!(self.peek()?.r#type, Question) {
+			self.advance()?;
+			let then_branch = self.expression()?;
+			if !matches!(self.peek()?.r#type, Colon) {
+				return Err(
+					ParseError::new(self.peek()?.line, ParseErrorType::UnexpectedToken(":".to_string())).into(),
+				);
+			}
+			self.advance()?;
+			let else_branch = self.ternary()?;
+			return Ok(Expression::ternary(condition, then_branch, else_branch));
+		}
+		Ok(condition)
 	}
 
 	/// Parse equality expressions.
@@ -260,5 +277,14 @@ mod tests {
 		parse("1, 2, 3", "(, (, 1 2) 3)");
 		parse("1 + 2, 3 * 4", "(, (+ 1 2) (* 3 4))");
 		parse("(1, 2), 3", "(, (group (, 1 2)) 3)");
+	}
+
+	#[test]
+	fn parse_ternary() {
+		parse("1 ? 2 : 3", "(? 1 : 2 3)");
+		parse("1 == 2 ? 3 : 4", "(? (== 1 2) : 3 4)");
+		parse("1 ? 2 ? 3 : 4 : 5", "(? 1 : (? 2 : 3 4) 5)");
+		parse("1, 2 ? 3 : 4", "(, 1 (? 2 : 3 4))");
+		parse("(1 ? 2 : 3) + 4", "(+ (group (? 1 : 2 3)) 4)");
 	}
 }

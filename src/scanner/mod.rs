@@ -89,6 +89,8 @@ impl<'a> Scanner<'a> {
 			'{' => LeftBrace,
 			'}' => RightBrace,
 			',' => Comma,
+			'?' => Question,
+			':' => Colon,
 			'.' => Dot,
 			'-' => Minus,
 			'+' => Plus,

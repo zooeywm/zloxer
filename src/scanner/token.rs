@@ -29,6 +29,10 @@ pub(crate) enum TokenType<'a> {
 	RightBrace,
 	/// Comma `,`.
 	Comma,
+	/// Question mark `?`.
+	Question,
+	/// Colon `:`.
+	Colon,
 	/// Dot `.`.
 	Dot,
 	/// Minus `-`.

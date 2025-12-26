@@ -14,6 +14,7 @@ pub(crate) enum Expression<'a> {
 	Binary { left: Box<Expression<'a>>, operator: Token<'a>, right: Box<Expression<'a>> },
 	Grouping(Box<Expression<'a>>),
 	Comma { left: Box<Expression<'a>>, right: Box<Expression<'a>> },
+	Ternary { condition: Box<Expression<'a>>, then_branch: Box<Expression<'a>>, else_branch: Box<Expression<'a>> },
 }
 
 impl<'a> Expression<'a> {
@@ -40,6 +41,10 @@ impl<'a> Expression<'a> {
 
 	pub fn comma(left: Box<Self>, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Comma { left, right })
+	}
+
+	pub fn ternary(condition: Box<Self>, then_branch: Box<Self>, else_branch: Box<Self>) -> Box<Self> {
+		Box::new(Expression::Ternary { condition, then_branch, else_branch })
 	}
 
 	// ---------- Grouping ----------
@@ -80,6 +85,7 @@ impl std::fmt::Display for Expression<'_> {
 			Binary { left, operator, right } => write!(f, "({} {} {})", operator.lexeme, left, right),
 			Grouping(expression) => write!(f, "(group {})", expression),
 			Comma { left, right } => write!(f, "(, {} {})", left, right),
+			Ternary { condition, then_branch, else_branch } => write!(f, "(? {} : {} {})", condition, then_branch, else_branch),
 		}
 	}
 }
