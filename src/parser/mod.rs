@@ -13,7 +13,8 @@
 //!
 //! |Name|Operators|Associates
 //! --|--|--
-//! Equality|== ! =|Left
+//! Comma|,|Left
+//! Equality|== !=|Left
 //! Comparison|< > <= >=|Left
 //! Term|+ -|Left
 //! Factor|* /|Left
@@ -22,7 +23,8 @@
 //! Expression grammar:
 //!
 //! ``` BNF
-//! expression     → equality ;
+//! expression     → comma ;
+//! comma          → equality ( "," equality )* ;
 //! equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 //! comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 //! term           → factor ( ( "-" | "+" ) factor )* ;
@@ -66,8 +68,22 @@ impl<'a> Parser<'a> {
 		}
 	}
 
-	/// Parse equality expressions.
+	/// Parse comma expressions.
 	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		self.comma()
+	}
+
+	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let mut expr = self.equality()?;
+		while matches!(self.peek()?.r#type, Comma) {
+			self.advance()?;
+			expr = Expression::comma(expr, self.equality()?)
+		}
+		Ok(expr)
+	}
+
+	/// Parse equality expressions.
+	fn equality(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let mut expression = self.comparison()?;
 		while matches!(self.peek()?.r#type, BangEqual | EqualEqual) {
 			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
@@ -236,5 +252,13 @@ mod tests {
 		parse("!(1 < 2)", "(! (group (< 1 2)))");
 		parse("-(1 + 2)", "(- (group (+ 1 2)))");
 		parse("1 + 2 * 3 < 4 - 5 / 6", "(< (+ 1 (* 2 3)) (- 4 (/ 5 6)))");
+	}
+
+	#[test]
+	fn parse_comma() {
+		parse("1, 2", "(, 1 2)");
+		parse("1, 2, 3", "(, (, 1 2) 3)");
+		parse("1 + 2, 3 * 4", "(, (+ 1 2) (* 3 4))");
+		parse("(1, 2), 3", "(, (group (, 1 2)) 3)");
 	}
 }
