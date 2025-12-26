@@ -30,18 +30,18 @@ pub enum ParseErrorType {
 	UnterminatedParenthesis,
 	/// Error for unexpected tokens.
 	UnexpectedToken(String),
+	ExpectSemicolon,
 }
 
 impl std::fmt::Display for ParseErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		use ParseErrorType::*;
 		match self {
-			UnterminatedParenthesis => {
-				write!(f, "Unterminated parenthesis")
-			}
-			UnexpectedToken(e) => {
-				write!(f, "Unexpected token: {e}")
-			}
+			UnterminatedParenthesis => write!(f, "Unterminated parenthesis"),
+
+			UnexpectedToken(e) => write!(f, "Unexpected token: {e}"),
+
+			ExpectSemicolon => write!(f, "Expect ';' at the end of statement."),
 		}
 	}
 }

@@ -48,11 +48,10 @@ impl Loxer {
 		let mut scanner = Scanner::new(source);
 		let tokens = scanner.scan_tokens()?;
 		let mut parser = Parser::new(tokens);
-		let expression = parser.parse()?;
+		let statements = parser.parse()?;
 		let interpreter = Interpreter;
-		interpreter.interpret(*expression)?;
+		interpreter.interpret(statements)?;
 
-		// println!("AST: {expression}");
 		Ok(())
 	}
 }

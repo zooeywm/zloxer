@@ -3,9 +3,11 @@
 //! (45.67)` as nested nodes.
 
 use Expression::*;
+use LiteralValue::*;
 
 use crate::scanner::Token;
 
+#[allow(clippy::enum_variant_names)]
 /// Expression AST nodes
 #[derive(Debug)]
 pub(crate) enum Expression<'a> {
@@ -52,13 +54,14 @@ impl<'a> Expression<'a> {
 	pub fn grouping(expr: Box<Self>) -> Box<Self> { Box::new(Expression::Grouping(expr)) }
 }
 
+#[allow(clippy::enum_variant_names)]
 /// Literal values in the AST
 #[derive(Debug)]
 pub(crate) enum LiteralValue<'a> {
 	Number(f64),
-	StringLiteral2(&'a str),
+	StringLiteral(&'a str),
 	Boolean(bool),
-	NilLiteral,
+	Nil,
 }
 
 impl<'a> TryFrom<Token<'a>> for Expression<'a> {
@@ -68,11 +71,11 @@ impl<'a> TryFrom<Token<'a>> for Expression<'a> {
 		use crate::scanner::TokenType::*;
 
 		Ok(match token.r#type {
-			NumberToken(n) => Expression::Literal(LiteralValue::Number(n)),
-			StringToken(s) => Expression::Literal(LiteralValue::StringLiteral2(s)),
-			True => Expression::Literal(LiteralValue::Boolean(true)),
-			False => Expression::Literal(LiteralValue::Boolean(false)),
-			NilToken => Expression::Literal(LiteralValue::NilLiteral),
+			Number(n) => Literal(LiteralValue::Number(n)),
+			String(s) => Literal(StringLiteral(s)),
+			True => Literal(Boolean(true)),
+			False => Literal(Boolean(false)),
+			Nil => Literal(LiteralValue::Nil),
 			_ => anyhow::bail!("Cannot convert token {:?} to Expression::Literal", token),
 		})
 	}
@@ -97,9 +100,9 @@ impl std::fmt::Display for LiteralValue<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			LiteralValue::Number(n) => write!(f, "{}", n),
-			LiteralValue::StringLiteral2(s) => write!(f, "\"{}\"", s),
+			LiteralValue::StringLiteral(s) => write!(f, "\"{}\"", s),
 			LiteralValue::Boolean(b) => write!(f, "{}", b),
-			LiteralValue::NilLiteral => write!(f, "nil"),
+			LiteralValue::Nil => write!(f, "nil"),
 		}
 	}
 }

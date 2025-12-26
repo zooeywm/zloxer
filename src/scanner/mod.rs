@@ -88,7 +88,7 @@ impl<'a> Scanner<'a> {
 			')' => RightParen,
 			'{' => LeftBrace,
 			'}' => RightBrace,
-			',' => CommaToken,
+			',' => Comma,
 			'?' => Question,
 			':' => Colon,
 			'.' => Dot,
@@ -163,7 +163,7 @@ impl<'a> Scanner<'a> {
 		self.peek().ok_or_else(|| ScanError::new(self.line, ScanErrorType::UnterminatedString))?;
 		self.advance(); // The closing "
 		let value = &self.source[self.start + 1..self.cursor - 1];
-		Ok(StringToken(value))
+		Ok(String(value))
 	}
 
 	/// Scan a number literal
@@ -181,7 +181,7 @@ impl<'a> Scanner<'a> {
 		}
 
 		let s = &self.source[self.start..self.cursor];
-		Ok(NumberToken(s.parse().context("Failed to parse number literal")?))
+		Ok(Number(s.parse().context("Failed to parse number literal")?))
 	}
 
 	/// Peek the second character ahead
@@ -346,9 +346,9 @@ mod tests {
 		let mut scanner = Scanner::new("1 + 2");
 		let tokens = scanner.scan_tokens().unwrap();
 		assert_eq!(tokens.len(), 4);
-		assert_eq!(tokens[0].r#type, NumberToken(1.0));
+		assert_eq!(tokens[0].r#type, Number(1.0));
 		assert_eq!(tokens[1].r#type, Plus);
-		assert_eq!(tokens[2].r#type, NumberToken(2.0));
+		assert_eq!(tokens[2].r#type, Number(2.0));
 		assert_eq!(tokens[3].r#type, Eof);
 	}
 
@@ -359,13 +359,13 @@ mod tests {
 world""#,
 		);
 		let tokens = scanner.scan_tokens().unwrap();
-		assert_eq!(tokens[0].r#type, StringToken("hello\nworld"));
+		assert_eq!(tokens[0].r#type, String("hello\nworld"));
 	}
 
 	#[test]
 	fn scan_number_precision() {
 		let mut scanner = Scanner::new("3.14159265358979323846264338327950288");
 		let tokens = scanner.scan_tokens().unwrap();
-		assert_eq!(tokens[0].r#type, NumberToken(PI));
+		assert_eq!(tokens[0].r#type, Number(PI));
 	}
 }

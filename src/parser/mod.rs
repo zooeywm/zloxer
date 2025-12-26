@@ -24,6 +24,10 @@
 //! Expression grammar:
 //!
 //! ``` BNF
+//! program        → statement* EOF ;
+//! statement      → exprStmt | printStmt ;
+//! exprStmt       → expression ";" ;
+//! printStmt      → "print" expression ";" ;
 //! expression     → comma ;
 //! comma          → ternary ( "," ternary )* ;
 //! ternary        → equality ( "?" expression ":" ternary )? ;
@@ -42,13 +46,13 @@ use std::{convert::TryInto, iter::Peekable, vec::IntoIter};
 use TokenType::*;
 use anyhow::anyhow;
 
-use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::Expression, scanner::{Token, TokenType}};
+use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::Expression, scanner::{Token, TokenType}, statement::Statement};
 
 /// ParserError is the error type for the parser.
 pub struct Parser<'a> {
 	/// The tokens to parse.
 	tokens:      Peekable<IntoIter<Token<'a>>>,
-    /// The number of errors encountered during parsing.
+	/// The number of errors encountered during parsing.
 	error_count: usize,
 }
 
@@ -57,8 +61,46 @@ impl<'a> Parser<'a> {
 		Self { tokens: tokens.into_iter().peekable(), error_count: 0 }
 	}
 
+	pub fn parse(&mut self) -> Result<Vec<Statement<'a>>, LoxError> {
+		let mut statements = Vec::new();
+		while let Ok(token) = self.peek() {
+			if matches!(token.r#type, TokenType::Eof) {
+				break;
+			}
+			match self.parse_statement() {
+				Ok(stmt) => statements.push(stmt),
+				Err(ParserError::InternalError(e)) => return Err(e.into()),
+				Err(ParserError::ParseError(e)) => {
+					self.report(&e);
+					continue;
+				}
+			}
+		}
+		if self.error_count > 0 { Err(LoxError::ParserErrors(self.error_count)) } else { Ok(statements) }
+	}
+
+	fn parse_statement(&mut self) -> Result<Statement<'a>, ParserError> {
+		if matches!(self.peek()?.r#type, TokenType::Print) {
+			self.advance()?; // consume 'print'
+			let expression = self.expression()?;
+			if !matches!(self.peek()?.r#type, Semicolon) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+			}
+			self.advance()?; // consume ';'
+			Ok(Statement::Print(expression))
+		} else {
+			let expression = self.expression()?;
+			if !matches!(self.peek()?.r#type, Semicolon) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+			}
+			self.advance()?; // consume ';'
+			Ok(Statement::Expression(expression))
+		}
+	}
+
 	/// Parse the tokens into an expression.
-	pub fn parse(&mut self) -> Result<Box<Expression<'a>>, LoxError> {
+	#[allow(dead_code)]
+	pub fn parse_expression(&mut self) -> Result<Box<Expression<'a>>, LoxError> {
 		match self.expression() {
 			Ok(expr) => {
 				if self.error_count > 0 {
@@ -78,7 +120,7 @@ impl<'a> Parser<'a> {
 	/// Parse comma expressions.
 	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let mut expr = self.ternary()?;
-		while matches!(self.peek()?.r#type, CommaToken) {
+		while matches!(self.peek()?.r#type, Comma) {
 			self.advance()?;
 			expr = Expression::comma(expr, self.ternary()?)
 		}
@@ -151,7 +193,7 @@ impl<'a> Parser<'a> {
 	fn primary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let token = self.peek()?;
 		match &token.r#type {
-			False | True | NilToken | NumberToken(_) | StringToken(_) => {
+			False | True | Nil | Number(_) | String(_) => {
 				let token = self.advance()?;
 				return Ok(Box::new(token.try_into()?));
 			}
@@ -168,7 +210,7 @@ impl<'a> Parser<'a> {
 			}
 			_ => {
 				let err_string = token.lexeme.to_string();
-				let error = ParseError::new(self.peek()?.line, ParseErrorType::UnexpectedToken(err_string));
+				let error = ParseError::new(token.line, ParseErrorType::UnexpectedToken(err_string));
 				self.report(&error);
 				self.advance()?; // consume unexpected token
 				Err(error.into())
@@ -215,7 +257,7 @@ mod tests {
 		let mut scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let mut parser = Parser::new(tokens);
-		let ast = parser.parse().unwrap();
+		let ast = parser.parse_expression().unwrap();
 		assert_eq!(ast.to_string(), equals);
 	}
 
@@ -305,5 +347,25 @@ mod tests {
 			"(1 + 2) * 3 < 4 ? 5, 6 : 7 == 8 ? 9 : 10",
 			"(? (< (* (group (+ 1 2)) 3) 4) : (, 5 6) (? (== 7 8) : 9 10))",
 		);
+	}
+
+	#[test]
+	fn parse_print_statement() {
+		let mut scanner = Scanner::new("print 123;");
+		let tokens = scanner.scan_tokens().unwrap();
+		let mut parser = Parser::new(tokens);
+		let statements = parser.parse().unwrap();
+		assert_eq!(statements.len(), 1);
+		assert!(matches!(statements[0], Statement::Print(_)));
+	}
+
+	#[test]
+	fn parse_expression_statement() {
+		let mut scanner = Scanner::new("123;");
+		let tokens = scanner.scan_tokens().unwrap();
+		let mut parser = Parser::new(tokens);
+		let statements = parser.parse().unwrap();
+		assert_eq!(statements.len(), 1);
+		assert!(matches!(statements[0], Statement::Expression(_)));
 	}
 }

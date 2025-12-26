@@ -14,17 +14,38 @@
 
 mod value;
 
-use Expression::*;
-use value::Value::*;
+use Expression::{Comma as CommaExpression, *};
+use value::Value;
 
-use crate::{LoxError, error::interpreter::InterpreterError, interpreter::value::Value, parser::expression::{Expression, LiteralValue::*}, scanner::TokenType::*};
+use crate::{LoxError, error::interpreter::InterpreterError, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::TokenType::*, statement::Statement};
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter;
 
 impl<'a> Interpreter {
+	pub fn interpret(&self, statements: Vec<Statement<'a>>) -> Result<(), InterpreterError> {
+		for statement in statements {
+			self.interpret_statement(statement)?;
+		}
+		Ok(())
+	}
+
+	fn interpret_statement(&self, statement: Statement<'a>) -> Result<(), InterpreterError> {
+		match statement {
+			Statement::Expression(expression) => {
+				self.evaluate(*expression)?;
+			}
+			Statement::Print(expression) => {
+				let value = self.evaluate(*expression)?;
+				println!("{value}");
+			}
+		}
+		Ok(())
+	}
+
 	/// Interpret the given expression and print the result.
-	pub fn interpret(&'a self, expr: Expression<'a>) -> Result<(), LoxError> {
+	#[allow(dead_code)]
+	pub fn interpret_expression(&'a self, expr: Expression<'a>) -> Result<(), LoxError> {
 		let value = self.evaluate(expr)?;
 		println!("{value}");
 		Ok(())
@@ -34,16 +55,16 @@ impl<'a> Interpreter {
 	fn evaluate(&'a self, expr: Expression<'a>) -> Result<Value, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => match lit {
-				NilLiteral => Null,
-				Boolean(b) => Bool(b),
-				Number(n) => Num(n),
-				StringLiteral2(s) => Str(s.to_string()),
+				LiteralValue::Nil => Value::Nil,
+				Boolean(b) => Value::Boolean(b),
+				LiteralValue::Number(n) => Value::Number(n),
+				StringLiteral(s) => Value::StringLiteral(s.to_string()),
 			},
 			Unary { operator, right } => {
 				let right_value = self.evaluate(*right)?;
 				match (&operator.r#type, &right_value) {
-					(Minus, Num(n)) => Num(-n),
-					(Bang, v) => Bool(!v.to_bool()),
+					(Minus, Value::Number(n)) => Value::Number(-n),
+					(Bang, v) => Value::Boolean(!v.to_bool()),
 					_ => {
 						return Err(InterpreterError::UnaryOperationError(format!(
 							"line {}: {operator:?} {right_value:?}",
@@ -60,7 +81,7 @@ impl<'a> Interpreter {
 				))?
 			}
 			Grouping(inner) => self.evaluate(*inner)?,
-			Comma { left, right } => {
+			CommaExpression { left, right } => {
 				self.evaluate(*left)?;
 				self.evaluate(*right)?
 			}

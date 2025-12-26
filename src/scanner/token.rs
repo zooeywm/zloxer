@@ -33,7 +33,7 @@ pub(crate) enum TokenType<'a> {
 	/// Right brace `}`.
 	RightBrace,
 	/// Comma `,`.
-	CommaToken,
+	Comma,
 	/// Question mark `?`.
 	Question,
 	/// Colon `:`.
@@ -69,9 +69,9 @@ pub(crate) enum TokenType<'a> {
 	/// Identifier, e.g. variable or function name.
 	Identifier(&'a str),
 	/// String literal, e.g. `"hello"`.
-	StringToken(&'a str),
+	String(&'a str),
 	/// Number literal, e.g. `123.45`.
-	NumberToken(f64),
+	Number(f64),
 	/// Logical AND keyword.
 	And,
 	/// Class keyword.
@@ -87,7 +87,7 @@ pub(crate) enum TokenType<'a> {
 	/// If statement keyword.
 	If,
 	/// Nil literal (null equivalent).
-	NilToken,
+	Nil,
 	/// Logical OR keyword.
 	Or,
 	/// Print statement keyword.
@@ -112,8 +112,8 @@ impl Display for TokenType<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			TokenType::Identifier(name) => write!(f, "Identifier({})", name),
-			TokenType::StringToken(s) => write!(f, "String({})", s),
-			TokenType::NumberToken(n) => write!(f, "Number({})", n),
+			TokenType::String(s) => write!(f, "String({})", s),
+			TokenType::Number(n) => write!(f, "Number({})", n),
 			other => write!(f, "{:?}", other),
 		}
 	}
@@ -136,7 +136,7 @@ impl<'a> TokenType<'a> {
 			"for" => TokenType::For,
 			"fun" => TokenType::Fun,
 			"if" => TokenType::If,
-			"nil" => TokenType::NilToken,
+			"nil" => TokenType::Nil,
 			"or" => TokenType::Or,
 			"print" => TokenType::Print,
 			"return" => TokenType::Return,
