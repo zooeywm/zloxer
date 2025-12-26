@@ -35,7 +35,7 @@
 //! primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 //! ```
 
-mod expression;
+pub(crate) mod expression;
 
 use std::{convert::TryInto, iter::Peekable, vec::IntoIter};
 
@@ -48,6 +48,7 @@ use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, 
 pub struct Parser<'a> {
 	/// The tokens to parse.
 	tokens:      Peekable<IntoIter<Token<'a>>>,
+    /// The number of errors encountered during parsing.
 	error_count: usize,
 }
 
@@ -56,6 +57,7 @@ impl<'a> Parser<'a> {
 		Self { tokens: tokens.into_iter().peekable(), error_count: 0 }
 	}
 
+	/// Parse the tokens into an expression.
 	pub fn parse(&mut self) -> Result<Box<Expression<'a>>, LoxError> {
 		match self.expression() {
 			Ok(expr) => {
@@ -73,15 +75,17 @@ impl<'a> Parser<'a> {
 	/// Parse comma expressions.
 	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> { self.comma() }
 
+	/// Parse comma expressions.
 	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let mut expr = self.ternary()?;
-		while matches!(self.peek()?.r#type, Comma) {
+		while matches!(self.peek()?.r#type, CommaToken) {
 			self.advance()?;
 			expr = Expression::comma(expr, self.ternary()?)
 		}
 		Ok(expr)
 	}
 
+	/// Parse ternary expressions.
 	fn ternary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let condition = self.equality()?;
 		if matches!(self.peek()?.r#type, Question) {
@@ -147,7 +151,7 @@ impl<'a> Parser<'a> {
 	fn primary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let token = self.peek()?;
 		match &token.r#type {
-			False | True | Nil | NumberLiteral(_) | StringLiteral(_) => {
+			False | True | NilToken | NumberToken(_) | StringToken(_) => {
 				let token = self.advance()?;
 				return Ok(Box::new(token.try_into()?));
 			}
@@ -182,11 +186,14 @@ impl<'a> Parser<'a> {
 		self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF").into())
 	}
 
+	/// Report a parse error.
 	fn report(&mut self, error: &ParseError) {
 		self.error_count += 1;
 		eprintln!("{error}");
 	}
 
+	/// Synchronize the parser after an error.
+	#[allow(dead_code)]
 	fn synchronize(&mut self) -> Result<(), ParserError> {
 		self.advance()?;
 		while let Ok(token) = self.peek() {
@@ -286,5 +293,17 @@ mod tests {
 		parse("1 ? 2 ? 3 : 4 : 5", "(? 1 : (? 2 : 3 4) 5)");
 		parse("1, 2 ? 3 : 4", "(, 1 (? 2 : 3 4))");
 		parse("(1 ? 2 : 3) + 4", "(+ (group (? 1 : 2 3)) 4)");
+	}
+
+	#[test]
+	fn parse_all_operators() {
+		parse(
+			"!-1 < 2 ? 3 + 4 * 5 : 6 - 7 / 8, 9 == 10 != 11",
+			"(, (? (< (! (- 1)) 2) : (+ 3 (* 4 5)) (- 6 (/ 7 8))) (!= (== 9 10) 11))",
+		);
+		parse(
+			"(1 + 2) * 3 < 4 ? 5, 6 : 7 == 8 ? 9 : 10",
+			"(? (< (* (group (+ 1 2)) 3) 4) : (, 5 6) (? (== 7 8) : 9 10))",
+		);
 	}
 }

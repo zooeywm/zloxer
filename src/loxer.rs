@@ -2,7 +2,7 @@ use std::{fs::read_to_string, io::Write, path::Path};
 
 use anyhow::Context;
 
-use crate::{LoxError, parser::Parser, scanner::Scanner};
+use crate::{LoxError, interpreter::Interpreter, parser::Parser, scanner::Scanner};
 
 /// Loxer is the main struct for the Lox compiler/interpreter.
 pub struct Loxer;
@@ -49,7 +49,10 @@ impl Loxer {
 		let tokens = scanner.scan_tokens()?;
 		let mut parser = Parser::new(tokens);
 		let expression = parser.parse()?;
-		println!("AST: {expression}");
+		let interpreter = Interpreter;
+		interpreter.interpret(*expression)?;
+
+		// println!("AST: {expression}");
 		Ok(())
 	}
 }

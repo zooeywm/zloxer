@@ -10,25 +10,28 @@ use crate::scanner::Token;
 #[derive(Debug)]
 pub(crate) enum Expression<'a> {
 	Literal(LiteralValue<'a>),
-	Unary { operator: Token<'a>, right: Box<Expression<'a>> },
-	Binary { left: Box<Expression<'a>>, operator: Token<'a>, right: Box<Expression<'a>> },
+	Unary {
+		operator: Token<'a>,
+		right:    Box<Expression<'a>>,
+	},
+	Binary {
+		left:     Box<Expression<'a>>,
+		operator: Token<'a>,
+		right:    Box<Expression<'a>>,
+	},
 	Grouping(Box<Expression<'a>>),
-	Comma { left: Box<Expression<'a>>, right: Box<Expression<'a>> },
-	Ternary { condition: Box<Expression<'a>>, then_branch: Box<Expression<'a>>, else_branch: Box<Expression<'a>> },
+	Comma {
+		left:  Box<Expression<'a>>,
+		right: Box<Expression<'a>>,
+	},
+	Ternary {
+		condition:   Box<Expression<'a>>,
+		then_branch: Box<Expression<'a>>,
+		else_branch: Box<Expression<'a>>,
+	},
 }
 
 impl<'a> Expression<'a> {
-	// ---------- Literal ----------
-	pub fn literal(value: LiteralValue<'a>) -> Box<Self> { Box::new(Expression::Literal(value)) }
-
-	pub fn number(n: f64) -> Box<Self> { Self::literal(LiteralValue::Number(n)) }
-
-	pub fn string(s: &'a str) -> Box<Self> { Self::literal(LiteralValue::String(s)) }
-
-	pub fn boolean(b: bool) -> Box<Self> { Self::literal(LiteralValue::Boolean(b)) }
-
-	pub fn nil() -> Box<Self> { Self::literal(LiteralValue::Nil) }
-
 	// ---------- Unary ----------
 	pub fn unary(operator: Token<'a>, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Unary { operator, right })
@@ -39,9 +42,7 @@ impl<'a> Expression<'a> {
 		Box::new(Expression::Binary { left, operator, right })
 	}
 
-	pub fn comma(left: Box<Self>, right: Box<Self>) -> Box<Self> {
-		Box::new(Expression::Comma { left, right })
-	}
+	pub fn comma(left: Box<Self>, right: Box<Self>) -> Box<Self> { Box::new(Expression::Comma { left, right }) }
 
 	pub fn ternary(condition: Box<Self>, then_branch: Box<Self>, else_branch: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Ternary { condition, then_branch, else_branch })
@@ -55,9 +56,9 @@ impl<'a> Expression<'a> {
 #[derive(Debug)]
 pub(crate) enum LiteralValue<'a> {
 	Number(f64),
-	String(&'a str),
+	StringLiteral2(&'a str),
 	Boolean(bool),
-	Nil,
+	NilLiteral,
 }
 
 impl<'a> TryFrom<Token<'a>> for Expression<'a> {
@@ -67,25 +68,27 @@ impl<'a> TryFrom<Token<'a>> for Expression<'a> {
 		use crate::scanner::TokenType::*;
 
 		Ok(match token.r#type {
-			NumberLiteral(n) => Expression::Literal(LiteralValue::Number(n)),
-			StringLiteral(s) => Expression::Literal(LiteralValue::String(s)),
+			NumberToken(n) => Expression::Literal(LiteralValue::Number(n)),
+			StringToken(s) => Expression::Literal(LiteralValue::StringLiteral2(s)),
 			True => Expression::Literal(LiteralValue::Boolean(true)),
 			False => Expression::Literal(LiteralValue::Boolean(false)),
-			Nil => Expression::Literal(LiteralValue::Nil),
+			NilToken => Expression::Literal(LiteralValue::NilLiteral),
 			_ => anyhow::bail!("Cannot convert token {:?} to Expression::Literal", token),
 		})
 	}
 }
 
 impl std::fmt::Display for Expression<'_> {
-		fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Literal(lit) => write!(f, "{}", lit),
 			Unary { operator, right } => write!(f, "({} {})", operator.lexeme, right),
 			Binary { left, operator, right } => write!(f, "({} {} {})", operator.lexeme, left, right),
 			Grouping(expression) => write!(f, "(group {})", expression),
 			Comma { left, right } => write!(f, "(, {} {})", left, right),
-			Ternary { condition, then_branch, else_branch } => write!(f, "(? {} : {} {})", condition, then_branch, else_branch),
+			Ternary { condition, then_branch, else_branch } => {
+				write!(f, "(? {} : {} {})", condition, then_branch, else_branch)
+			}
 		}
 	}
 }
@@ -94,26 +97,9 @@ impl std::fmt::Display for LiteralValue<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			LiteralValue::Number(n) => write!(f, "{}", n),
-			LiteralValue::String(s) => write!(f, "\"{}\"", s),
+			LiteralValue::StringLiteral2(s) => write!(f, "\"{}\"", s),
 			LiteralValue::Boolean(b) => write!(f, "{}", b),
-			LiteralValue::Nil => write!(f, "nil"),
+			LiteralValue::NilLiteral => write!(f, "nil"),
 		}
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use crate::scanner::TokenType::*;
-
-	#[test]
-	fn parse_expressions() {
-		let expression = Expression::binary(
-			Expression::unary(Token::new(Minus, "-", 1), Expression::number(123.0)),
-			Token::new(Star, "*", 1),
-			Expression::grouping(Expression::number(45.67)),
-		);
-
-		assert_eq!("(* (- 123) (group 45.67))", expression.to_string());
 	}
 }

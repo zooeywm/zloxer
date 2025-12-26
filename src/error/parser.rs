@@ -1,15 +1,21 @@
+/// Errors that can occur during parsing.
 #[derive(thiserror::Error, Debug)]
 pub enum ParserError {
+	/// Internal compiler error, should never happen
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
+	/// Errors encountered during parsing
 	#[error(transparent)]
 	ParseError(#[from] ParseError),
 }
 
+/// A specific parsing error with line number and type.
 #[derive(thiserror::Error, Debug)]
 #[error("line {line}: {type}")]
 pub struct ParseError {
+	/// The line number where the error occurred.
 	line:   usize,
+	/// The type of parsing error.
 	r#type: ParseErrorType,
 }
 
@@ -17,9 +23,12 @@ impl ParseError {
 	pub fn new(line: usize, r#type: ParseErrorType) -> Self { Self { line, r#type } }
 }
 
+/// Types of parsing errors.
 #[derive(Debug)]
 pub enum ParseErrorType {
+	/// Error for unterminated parenthesis.
 	UnterminatedParenthesis,
+	/// Error for unexpected tokens.
 	UnexpectedToken(String),
 }
 

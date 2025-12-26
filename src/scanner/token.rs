@@ -1,8 +1,13 @@
+use std::fmt::Display;
+
 /// A token produced by the scanner
 #[derive(Debug, Clone)]
 pub(crate) struct Token<'a> {
+	/// The type of the token.
 	pub r#type: TokenType<'a>,
+	/// The lexeme (string representation) of the token.
 	pub lexeme: &'a str,
+	/// The line number where the token was found.
 	pub line:   usize,
 }
 
@@ -28,7 +33,7 @@ pub(crate) enum TokenType<'a> {
 	/// Right brace `}`.
 	RightBrace,
 	/// Comma `,`.
-	Comma,
+	CommaToken,
 	/// Question mark `?`.
 	Question,
 	/// Colon `:`.
@@ -64,9 +69,9 @@ pub(crate) enum TokenType<'a> {
 	/// Identifier, e.g. variable or function name.
 	Identifier(&'a str),
 	/// String literal, e.g. `"hello"`.
-	StringLiteral(&'a str),
+	StringToken(&'a str),
 	/// Number literal, e.g. `123.45`.
-	NumberLiteral(f64),
+	NumberToken(f64),
 	/// Logical AND keyword.
 	And,
 	/// Class keyword.
@@ -82,7 +87,7 @@ pub(crate) enum TokenType<'a> {
 	/// If statement keyword.
 	If,
 	/// Nil literal (null equivalent).
-	Nil,
+	NilToken,
 	/// Logical OR keyword.
 	Or,
 	/// Print statement keyword.
@@ -103,11 +108,25 @@ pub(crate) enum TokenType<'a> {
 	Eof,
 }
 
+impl Display for TokenType<'_> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			TokenType::Identifier(name) => write!(f, "Identifier({})", name),
+			TokenType::StringToken(s) => write!(f, "String({})", s),
+			TokenType::NumberToken(n) => write!(f, "Number({})", n),
+			other => write!(f, "{:?}", other),
+		}
+	}
+}
+
 impl<'a> TokenType<'a> {
+	/// Check if the token type is to be ignored (whitespace, new lines,
+	/// comments).
 	pub fn is_ignored(&self) -> bool {
 		matches!(self, TokenType::EmptyChar | TokenType::NewLine | TokenType::Comment)
 	}
 
+	/// Determine if a given string is a keyword or an identifier.
 	pub fn keyword_or_identifier(value: &'a str) -> Self {
 		match value {
 			"and" => TokenType::And,
@@ -117,7 +136,7 @@ impl<'a> TokenType<'a> {
 			"for" => TokenType::For,
 			"fun" => TokenType::Fun,
 			"if" => TokenType::If,
-			"nil" => TokenType::Nil,
+			"nil" => TokenType::NilToken,
 			"or" => TokenType::Or,
 			"print" => TokenType::Print,
 			"return" => TokenType::Return,
