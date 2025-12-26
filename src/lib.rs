@@ -110,10 +110,10 @@
 
 pub mod cli;
 mod error;
+mod interpreter;
 mod loxer;
 mod parser;
 mod scanner;
-mod interpreter;
 
 pub use error::{LoxError, scanner::{ScanError, ScanErrorType, ScannerError}};
 pub use loxer::Loxer;
