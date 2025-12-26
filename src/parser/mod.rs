@@ -185,4 +185,56 @@ mod tests {
 		parse("1 + 2 * 3 / 4 - 5", "(- (+ 1 (/ (* 2 3) 4)) 5)");
 		parse("8 + 800.3 * 123 / 65 - (2 + 3)", "(- (+ 8 (/ (* 800.3 123) 65)) (group (+ 2 3)))");
 	}
+
+	#[test]
+	fn parse_comparison() {
+		parse("1 < 2", "(< 1 2)");
+		parse("1 <= 2", "(<= 1 2)");
+		parse("1 > 2", "(> 1 2)");
+		parse("1 >= 2", "(>= 1 2)");
+		parse("1 < 2 < 3", "(< 1 (< 2 3))");
+	}
+
+	#[test]
+	fn parse_equality() {
+		parse("1 == 2", "(== 1 2)");
+		parse("1 != 2", "(!= 1 2)");
+		parse("1 == 2 == 3", "(== (== 1 2) 3)");
+		parse("1 != 2 == 3", "(== (!= 1 2) 3)");
+	}
+
+	#[test]
+	fn parse_unary() {
+		parse("-123", "(- 123)");
+		parse("!true", "(! true)");
+		parse("-(-123)", "(- (group (- 123)))");
+		parse("!!true", "(! (! true))");
+		parse("-1 + 2", "(+ (- 1) 2)");
+	}
+
+	#[test]
+	fn parse_literals() {
+		parse("42", "42");
+		parse("3.14", "3.14");
+		parse("\"hello\"", "\"hello\"");
+		parse("true", "true");
+		parse("false", "false");
+		parse("nil", "nil");
+	}
+
+	#[test]
+	fn parse_grouping() {
+		parse("(1 + 2) * 3", "(* (group (+ 1 2)) 3)");
+		parse("1 * (2 + 3)", "(* 1 (group (+ 2 3)))");
+		parse("((1))", "(group (group 1))");
+	}
+
+	#[test]
+	fn parse_complex() {
+		parse("1 + 2 == 3", "(== (+ 1 2) 3)");
+		parse("1 + 2 != 3 - 4", "(!= (+ 1 2) (- 3 4))");
+		parse("!(1 < 2)", "(! (group (< 1 2)))");
+		parse("-(1 + 2)", "(- (group (+ 1 2)))");
+		parse("1 + 2 * 3 < 4 - 5 / 6", "(< (+ 1 (* 2 3)) (- 4 (/ 5 6)))");
+	}
 }
