@@ -16,6 +16,7 @@ pub(crate) enum Expression<'a> {
 		operator: Token<'a>,
 		right:    Box<Expression<'a>>,
 	},
+	Variable(Token<'a>),
 	Binary {
 		left:     Box<Expression<'a>>,
 		operator: Token<'a>,
@@ -76,6 +77,7 @@ impl<'a> TryFrom<Token<'a>> for Expression<'a> {
 			True => Literal(Boolean(true)),
 			False => Literal(Boolean(false)),
 			Nil => Literal(LiteralValue::Nil),
+			Identifier(_) => Expression::Variable(token),
 			_ => anyhow::bail!("Cannot convert token {:?} to Expression::Literal", token),
 		})
 	}
@@ -84,14 +86,15 @@ impl<'a> TryFrom<Token<'a>> for Expression<'a> {
 impl std::fmt::Display for Expression<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Literal(lit) => write!(f, "{}", lit),
-			Unary { operator, right } => write!(f, "({} {})", operator.lexeme, right),
-			Binary { left, operator, right } => write!(f, "({} {} {})", operator.lexeme, left, right),
-			Grouping(expression) => write!(f, "(group {})", expression),
-			Comma { left, right } => write!(f, "(, {} {})", left, right),
+			Literal(lit) => write!(f, "{lit}"),
+			Unary { operator, right } => write!(f, "({} {right})", operator.lexeme),
+			Binary { left, operator, right } => write!(f, "({} {left} {right})", operator.lexeme),
+			Grouping(expression) => write!(f, "(group {expression})"),
+			Comma { left, right } => write!(f, "(, {left} {right})"),
 			Ternary { condition, then_branch, else_branch } => {
-				write!(f, "(? {} : {} {})", condition, then_branch, else_branch)
+				write!(f, "(? {condition} : {then_branch} {else_branch})")
 			}
+			Variable(token) => write!(f, "{}", token.lexeme),
 		}
 	}
 }
@@ -99,9 +102,9 @@ impl std::fmt::Display for Expression<'_> {
 impl std::fmt::Display for LiteralValue<'_> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			LiteralValue::Number(n) => write!(f, "{}", n),
-			LiteralValue::StringLiteral(s) => write!(f, "\"{}\"", s),
-			LiteralValue::Boolean(b) => write!(f, "{}", b),
+			LiteralValue::Number(n) => write!(f, "{n}"),
+			LiteralValue::StringLiteral(s) => write!(f, "\"{s}\""),
+			LiteralValue::Boolean(b) => write!(f, "{b}"),
 			LiteralValue::Nil => write!(f, "nil"),
 		}
 	}

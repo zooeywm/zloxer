@@ -30,7 +30,10 @@ pub enum ParseErrorType {
 	UnterminatedParenthesis,
 	/// Error for unexpected tokens.
 	UnexpectedToken(String),
+	/// Error for missing semicolon at the end of a statement.
 	ExpectSemicolon,
+	/// Error for missing variable name in variable declaration.
+	ExpectVariableName,
 }
 
 impl std::fmt::Display for ParseErrorType {
@@ -38,10 +41,9 @@ impl std::fmt::Display for ParseErrorType {
 		use ParseErrorType::*;
 		match self {
 			UnterminatedParenthesis => write!(f, "Unterminated parenthesis"),
-
 			UnexpectedToken(e) => write!(f, "Unexpected token: {e}"),
-
 			ExpectSemicolon => write!(f, "Expect ';' at the end of statement."),
+			ExpectVariableName => write!(f, "Expect variable name in declaration."),
 		}
 	}
 }

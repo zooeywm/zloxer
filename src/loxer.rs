@@ -49,7 +49,7 @@ impl Loxer {
 		let tokens = scanner.scan_tokens()?;
 		let mut parser = Parser::new(tokens);
 		let statements = parser.parse()?;
-		let interpreter = Interpreter;
+		let mut interpreter = Interpreter::new();
 		interpreter.interpret(statements)?;
 
 		Ok(())

@@ -5,7 +5,7 @@ use Value::*;
 #[allow(clippy::enum_variant_names)]
 /// Value represents a runtime value in Lox.
 #[derive(Debug)]
-pub(super) enum Value {
+pub enum Value {
 	Nil,
 	Boolean(bool),
 	Number(f64),

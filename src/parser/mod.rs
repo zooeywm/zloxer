@@ -24,19 +24,21 @@
 //! Expression grammar:
 //!
 //! ``` BNF
-//! program        → statement* EOF ;
-//! statement      → exprStmt | printStmt ;
-//! exprStmt       → expression ";" ;
-//! printStmt      → "print" expression ";" ;
-//! expression     → comma ;
-//! comma          → ternary ( "," ternary )* ;
-//! ternary        → equality ( "?" expression ":" ternary )? ;
-//! equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-//! comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-//! term           → factor ( ( "-" | "+" ) factor )* ;
-//! factor         → unary ( ( "/" | "*" ) unary )* ;
-//! unary          → ( "!" | "-" ) unary | primary ;
-//! primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
+//! program        -> declaration* EOF ;
+//! declaration    -> varDecl | statement ;
+//! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
+//! statement      -> exprStmt | printStmt ;
+//! exprStmt       -> expression ";" ;
+//! printStmt      -> "print" expression ";" ;
+//! expression     -> comma ;
+//! comma          -> ternary ( "," ternary )* ;
+//! ternary        -> equality ( "?" expression ":" ternary )? ;
+//! equality       -> comparison ( ( "!=" | "==" ) comparison )* ;
+//! comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+//! term           -> factor ( ( "-" | "+" ) factor )* ;
+//! factor         -> unary ( ( "/" | "*" ) unary )* ;
+//! unary          -> ( "!" | "-" ) unary | primary ;
+//! primary        -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 //! ```
 
 pub(crate) mod expression;
@@ -46,12 +48,18 @@ use std::{convert::TryInto, iter::Peekable, vec::IntoIter};
 use TokenType::*;
 use anyhow::anyhow;
 
-use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::Expression, scanner::{Token, TokenType}, statement::Statement};
+use crate::{
+	LoxError,
+	error::parser::{ParseError, ParseErrorType, ParserError},
+	parser::expression::Expression,
+	scanner::{Token, TokenType},
+	statement::Statement,
+};
 
 /// ParserError is the error type for the parser.
 pub struct Parser<'a> {
 	/// The tokens to parse.
-	tokens:      Peekable<IntoIter<Token<'a>>>,
+	tokens: Peekable<IntoIter<Token<'a>>>,
 	/// The number of errors encountered during parsing.
 	error_count: usize,
 }
@@ -67,11 +75,11 @@ impl<'a> Parser<'a> {
 			if matches!(token.r#type, TokenType::Eof) {
 				break;
 			}
-			match self.parse_statement() {
+			match self.parse_declaration() {
 				Ok(stmt) => statements.push(stmt),
 				Err(ParserError::InternalError(e)) => return Err(e.into()),
 				Err(ParserError::ParseError(e)) => {
-					self.report(&e);
+					self.synchronize(&e)?;
 					continue;
 				}
 			}
@@ -79,17 +87,48 @@ impl<'a> Parser<'a> {
 		if self.error_count > 0 { Err(LoxError::ParserErrors(self.error_count)) } else { Ok(statements) }
 	}
 
+	fn parse_declaration(&mut self) -> Result<Statement<'a>, ParserError> {
+		if matches!(self.peek()?.r#type, TokenType::Var) {
+			self.var_declaration()
+		} else {
+			self.parse_statement()
+		}
+	}
+
+	fn var_declaration(&mut self) -> Result<Statement<'a>, ParserError> {
+		self.advance()?; // consume 'var'
+		let name_token = self.advance()?;
+
+		if !matches!(name_token.r#type, TokenType::Identifier(_)) {
+			return Err(ParseError::new(name_token.line, ParseErrorType::ExpectVariableName).into());
+		}
+
+		let initializer = if matches!(self.peek()?.r#type, TokenType::Equal) {
+			self.advance()?; // consume '='
+			Some(*self.expression()?)
+		} else {
+			None
+		};
+
+		if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
+			return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+		}
+		self.advance()?; // consume ';'
+
+		Ok(Statement::VarDeclaration { name_token, initializer })
+	}
+
 	fn parse_statement(&mut self) -> Result<Statement<'a>, ParserError> {
 		if matches!(self.peek()?.r#type, TokenType::Print) {
 			self.advance()?; // consume 'print'
-			let expression = self.expression()?;
+			let expression = *self.expression()?;
 			if !matches!(self.peek()?.r#type, Semicolon) {
 				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Print(expression))
 		} else {
-			let expression = self.expression()?;
+			let expression = *self.expression()?;
 			if !matches!(self.peek()?.r#type, Semicolon) {
 				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
 			}
@@ -100,13 +139,13 @@ impl<'a> Parser<'a> {
 
 	/// Parse the tokens into an expression.
 	#[allow(dead_code)]
-	pub fn parse_expression(&mut self) -> Result<Box<Expression<'a>>, LoxError> {
+	pub fn parse_expression(&mut self) -> Result<Expression<'a>, LoxError> {
 		match self.expression() {
 			Ok(expr) => {
 				if self.error_count > 0 {
 					Err(LoxError::ParserErrors(self.error_count))
 				} else {
-					Ok(expr)
+					Ok(*expr)
 				}
 			}
 			Err(ParserError::InternalError(e)) => Err(e.into()),
@@ -115,7 +154,9 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse comma expressions.
-	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> { self.comma() }
+	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		self.comma()
+	}
 
 	/// Parse comma expressions.
 	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
@@ -193,9 +234,9 @@ impl<'a> Parser<'a> {
 	fn primary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let token = self.peek()?;
 		match &token.r#type {
-			False | True | Nil | Number(_) | String(_) => {
+			False | True | Nil | Number(_) | String(_) | Identifier(_) => {
 				let token = self.advance()?;
-				return Ok(Box::new(token.try_into()?));
+				Ok(Box::new(token.try_into()?))
 			}
 			LeftParen => {
 				self.advance()?; // consume '('
@@ -211,7 +252,7 @@ impl<'a> Parser<'a> {
 			_ => {
 				let err_string = token.lexeme.to_string();
 				let error = ParseError::new(token.line, ParseErrorType::UnexpectedToken(err_string));
-				self.report(&error);
+				self.synchronize(&error);
 				self.advance()?; // consume unexpected token
 				Err(error.into())
 			}
@@ -219,24 +260,20 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Advance to the next token.
-	fn advance(&mut self) -> Result<Token<'a>, ParserError> {
-		self.tokens.next().ok_or_else(|| anyhow!("Unexpected EOF").into())
+	fn advance(&mut self) -> anyhow::Result<Token<'a>> {
+		self.tokens.next().ok_or_else(|| anyhow!("Unexpected EOF"))
 	}
 
 	/// Peek at the current token.
-	fn peek(&mut self) -> Result<&Token<'a>, ParserError> {
-		self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF").into())
-	}
-
-	/// Report a parse error.
-	fn report(&mut self, error: &ParseError) {
-		self.error_count += 1;
-		eprintln!("{error}");
+	fn peek(&mut self) -> anyhow::Result<&Token<'a>> {
+		self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF"))
 	}
 
 	/// Synchronize the parser after an error.
 	#[allow(dead_code)]
-	fn synchronize(&mut self) -> Result<(), ParserError> {
+	fn synchronize(&mut self, error: &ParseError) -> anyhow::Result<()> {
+		self.error_count += 1;
+		eprintln!("{error}");
 		self.advance()?;
 		while let Ok(token) = self.peek() {
 			if matches!(token.r#type, Class | Fun | Var | For | If | While | Print | Return) {
@@ -261,6 +298,7 @@ mod tests {
 		assert_eq!(ast.to_string(), equals);
 	}
 
+	// Expression tests using parse() function
 	#[test]
 	fn parse_expressions() {
 		parse("3 + 4 * (-2 - 1)", "(+ 3 (* 4 (group (- (- 2) 1))))");
@@ -349,23 +387,27 @@ mod tests {
 		);
 	}
 
+	// Variable-related tests using parse() function
 	#[test]
-	fn parse_print_statement() {
-		let mut scanner = Scanner::new("print 123;");
-		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
-		let statements = parser.parse().unwrap();
-		assert_eq!(statements.len(), 1);
-		assert!(matches!(statements[0], Statement::Print(_)));
-	}
+	fn parse_variable_expressions() {
+		// Variable names as identifiers
+		parse("x", "x");
+		parse("myVar", "myVar");
+		parse("_underscore_var", "_underscore_var");
 
-	#[test]
-	fn parse_expression_statement() {
-		let mut scanner = Scanner::new("123;");
-		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
-		let statements = parser.parse().unwrap();
-		assert_eq!(statements.len(), 1);
-		assert!(matches!(statements[0], Statement::Expression(_)));
+		// Expressions with variables
+		parse("x + y", "(+ x y)");
+		parse("x * 2", "(* x 2)");
+		parse("(x + y) * z", "(* (group (+ x y)) z)");
+
+		// Complex expressions with variables
+		parse("x + y * z / w - v", "(- (+ x (/ (* y z) w)) v)");
+		parse("x == y ? a : b", "(? (== x y) : a b)");
+
+		// Variable initializers
+		parse("42", "42"); // For "var x = 42;"
+		parse("1 + 2 * 3", "(+ 1 (* 2 3))"); // For "var x = 1 + 2 * 3;"
+		parse("true", "true"); // For "var x = true;"
+		parse("\"hello\"", "\"hello\""); // For "var x = \"hello\";"
 	}
 }

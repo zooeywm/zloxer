@@ -109,6 +109,7 @@
 //! automatically recompile those hot spots with more advanced optimizations.
 
 pub mod cli;
+mod environment;
 mod error;
 mod interpreter;
 mod loxer;

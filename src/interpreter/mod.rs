@@ -12,32 +12,44 @@
 //! - **Comma**: Sequence operator (evaluates left, returns right)
 //! - **Ternary**: Conditional operator `?:`
 
-mod value;
+pub(crate) mod value;
 
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
 
-use crate::{LoxError, error::interpreter::InterpreterError, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::TokenType::*, statement::Statement};
+use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::TokenType::*, statement::Statement};
 
 /// Interpreter that evaluates Lox expressions.
-pub struct Interpreter;
+pub struct Interpreter<'a> {
+	environment: Environment<'a>,
+}
 
-impl<'a> Interpreter {
-	pub fn interpret(&self, statements: Vec<Statement<'a>>) -> Result<(), InterpreterError> {
+impl<'a> Interpreter<'a> {
+	pub fn new() -> Self { Self { environment: Environment::new() } }
+
+	pub fn interpret(&mut self, statements: Vec<Statement<'a>>) -> Result<(), InterpreterError> {
 		for statement in statements {
 			self.interpret_statement(statement)?;
 		}
 		Ok(())
 	}
 
-	fn interpret_statement(&self, statement: Statement<'a>) -> Result<(), InterpreterError> {
+	fn interpret_statement(&mut self, statement: Statement<'a>) -> Result<(), InterpreterError> {
 		match statement {
 			Statement::Expression(expression) => {
-				self.evaluate(*expression)?;
+				self.evaluate(expression)?;
 			}
 			Statement::Print(expression) => {
-				let value = self.evaluate(*expression)?;
+				let value = self.evaluate(expression)?;
 				println!("{value}");
+			}
+			Statement::VarDeclaration { name_token, initializer } => {
+				let value = if let Some(initializer_expr) = initializer {
+					self.evaluate(initializer_expr)?
+				} else {
+					Value::Nil
+				};
+				self.environment.define(name_token, value);
 			}
 		}
 		Ok(())
@@ -89,6 +101,7 @@ impl<'a> Interpreter {
 				let condition_value = self.evaluate(*condition)?;
 				if condition_value.to_bool() { self.evaluate(*then_branch)? } else { self.evaluate(*else_branch)? }
 			}
+			Variable(_) => todo!(),
 		})
 	}
 }
