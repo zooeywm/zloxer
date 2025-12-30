@@ -4,6 +4,16 @@ Learn from <https://www.craftinginterpreters.com>
 
 Run `cargo doc --open --document-private-items` to view rustdoc.
 
+`cargo test` to run tests.
+
+`cargo run -- help` to show help.
+
+`cargo run -- repl` to run reactive interpreter.
+
+`cargo run -- file <path>` to run lox file.
+
+`cargo run -- file tests/test.lox` to run the test lox file.
+
 ## Concepts
 
 ### Dynamic typing

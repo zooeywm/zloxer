@@ -9,7 +9,7 @@ pub enum Value {
 	Nil,
 	Boolean(bool),
 	Number(f64),
-	StringLiteral(String),
+	StringValue(String),
 }
 
 impl Display for Value {
@@ -24,7 +24,7 @@ impl Display for Value {
 					write!(f, "{n}")
 				}
 			}
-			Value::StringLiteral(s) => write!(f, "\"{s}\""),
+			Value::StringValue(s) => write!(f, "\"{s}\""),
 		}
 	}
 }
@@ -55,7 +55,7 @@ impl Value {
 		match self {
 			Value::Nil => false,
 			Value::Boolean(b) => *b,
-			Value::StringLiteral(s) => !s.is_empty(),
+			Value::StringValue(s) => !s.is_empty(),
 			Value::Number(n) => *n != 0.0,
 		}
 	}
@@ -64,9 +64,9 @@ impl Value {
 	pub fn plus(&self, other: &Self) -> Option<Value> {
 		match (self, other) {
 			(Number(l), Number(r)) => Some(Number(l + r)),
-			(StringLiteral(l), StringLiteral(r)) => Some(StringLiteral(format!("{l}{r}"))),
-			(StringLiteral(l), Number(r)) => Some(StringLiteral(format!("{l}{r}"))),
-			(Number(l), StringLiteral(r)) => Some(StringLiteral(format!("{l}{r}"))),
+			(StringValue(l), StringValue(r)) => Some(StringValue(format!("{l}{r}"))),
+			(StringValue(l), Number(r)) => Some(StringValue(format!("{l}{r}"))),
+			(Number(l), StringValue(r)) => Some(StringValue(format!("{l}{r}"))),
 			_ => None,
 		}
 	}
@@ -138,7 +138,7 @@ impl Value {
 			(Nil, Nil) => true,
 			(Boolean(l), Boolean(r)) => l == r,
 			(Number(l), Number(r)) => l == r,
-			(StringLiteral(l), StringLiteral(r)) => l == r,
+			(StringValue(l), StringValue(r)) => l == r,
 			(Nil, _) => false,
 			(_, Nil) => false,
 			_ => return None,

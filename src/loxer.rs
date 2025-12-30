@@ -6,18 +6,17 @@ use crate::{LoxError, interpreter::Interpreter, parser::Parser, scanner::Scanner
 
 /// Loxer is the main struct for the Lox compiler/interpreter.
 pub struct Loxer {
-	sources:     rpds::List<&'static str>,
 	interpreter: Interpreter,
 }
 
 impl Loxer {
 	/// Create a new Loxer instance.
-	pub fn new() -> Self { Self { sources: rpds::List::new(), interpreter: Interpreter::new() } }
+	pub fn new() -> Self { Self { interpreter: Interpreter::new() } }
 
 	/// Run a file with the given path.
 	pub fn run_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), LoxError> {
 		let source = read_to_string(path).context("Failed open source file")?;
-		self.run(source)
+		self.run_statements(source)
 	}
 
 	/// Run the REPL prompt.
@@ -41,24 +40,45 @@ impl Loxer {
 					continue;
 				}
 			}
-			if let Err(e) = self.run(input) {
+			let first_non_ws = input.char_indices().find(|(_, c)| !c.is_whitespace()).map(|(i, _)| i);
+			let result = if let Some(start_idx) = first_non_ws {
+				if input[start_idx..].starts_with("var") || input[start_idx..].starts_with("print") {
+					self.run_statements(input)
+				} else {
+					match input.chars().rev().find(|c| !c.is_whitespace()) {
+						Some(';') => self.run_statements(input),
+						Some(_) => self.run_expression(input),
+						None => Ok(()),
+					}
+				}
+			} else {
+				Ok(())
+			};
+
+			if let Err(e) = result {
 				eprintln!("Failed run prompt: {e}");
 			}
 		}
 	}
 
-	/// Run the Loxer on the given source code.
-	fn run(&mut self, source: String) -> Result<(), LoxError> {
-		// Use `String::leak()` instead of `String::into_boxed_str()` to avoid
-		// reallocation
+	fn run_statements(&mut self, source: String) -> Result<(), LoxError> {
 		let leaked: &'static str = source.leak();
-		self.sources.push_front_mut(leaked);
-		let source_ref: &str = self.sources.first().context("No source found")?;
-		let scanner = Scanner::new(source_ref);
+		let scanner = Scanner::new(leaked);
 		let tokens = scanner.scan_tokens()?;
 		let parser = Parser::new(tokens);
 		let statements = parser.parse()?;
-		self.interpreter.interpret(statements)?;
+		self.interpreter.interpret_statements(statements)?;
+
+		Ok(())
+	}
+
+	fn run_expression(&mut self, source: String) -> Result<(), LoxError> {
+		let leaked: &'static str = source.leak();
+		let scanner = Scanner::new(leaked);
+		let tokens = scanner.scan_tokens()?;
+		let parser = Parser::new(tokens);
+		let expression = parser.parse_expression()?;
+		self.interpreter.interpret_expression(expression)?;
 
 		Ok(())
 	}

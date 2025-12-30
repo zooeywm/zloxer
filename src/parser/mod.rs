@@ -144,7 +144,6 @@ impl Parser {
 	}
 
 	/// Parse the tokens into an expression.
-	#[allow(dead_code)]
 	pub fn parse_expression(mut self) -> Result<Expression, LoxError> {
 		match self.expression() {
 			Ok(expr) => {
@@ -290,7 +289,6 @@ impl Parser {
 	fn peek(&mut self) -> anyhow::Result<&Token> { self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF")) }
 
 	/// Synchronize the parser after an error.
-	#[allow(dead_code)]
 	fn synchronize(&mut self, error: &ParseError) -> anyhow::Result<()> {
 		self.error_count += 1;
 		eprintln!("{error}");

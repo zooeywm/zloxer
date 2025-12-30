@@ -27,7 +27,7 @@ pub struct Interpreter {
 impl Interpreter {
 	pub fn new() -> Self { Self { environment: Box::new(Environment::new(None)) } }
 
-	pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<(), InterpreterError> {
+	pub fn interpret_statements(&mut self, statements: Vec<Statement>) -> Result<(), InterpreterError> {
 		for statement in statements {
 			self.interpret_statement(statement)?;
 		}
@@ -76,7 +76,6 @@ impl Interpreter {
 	}
 
 	/// Interpret the given expression and print the result.
-	#[allow(dead_code)]
 	pub fn interpret_expression(&mut self, expr: Expression) -> Result<(), LoxError> {
 		let value = self.evaluate(expr)?;
 		println!("{value}");
@@ -90,7 +89,7 @@ impl Interpreter {
 				LiteralValue::Nil => Value::Nil,
 				Boolean(b) => Value::Boolean(b),
 				LiteralValue::Number(n) => Value::Number(n),
-				StringLiteral(s) => Value::StringLiteral(s.to_string()),
+				StringLiteral(s) => Value::StringValue(s.to_string()),
 			},
 			Unary { operator, right } => {
 				let right_value = self.evaluate(*right)?;
@@ -169,7 +168,7 @@ mod tests {
 		let statements = parser.parse().unwrap();
 		let mut interpreter = Interpreter::new();
 
-		assert!(interpreter.interpret(statements).is_ok());
+		assert!(interpreter.interpret_statements(statements).is_ok());
 	}
 
 	#[test]
@@ -181,7 +180,7 @@ mod tests {
 		let mut interpreter = Interpreter::new();
 
 		// Test assignment and print
-		assert!(interpreter.interpret(statements).is_ok());
+		assert!(interpreter.interpret_statements(statements).is_ok());
 	}
 
 	#[test]
@@ -193,6 +192,6 @@ mod tests {
 		let mut interpreter = Interpreter::new();
 
 		// Test undefined variable should cause error
-		assert!(interpreter.interpret(statements).is_err());
+		assert!(interpreter.interpret_statements(statements).is_err());
 	}
 }
