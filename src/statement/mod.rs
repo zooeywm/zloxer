@@ -7,6 +7,7 @@ use crate::{parser::expression::Expression, scanner::Token};
 /// A statement in the programming language.
 #[derive(Debug)]
 pub enum Statement<'a> {
+	Block(Vec<Statement<'a>>),
 	/// An expression used as a statement.
 	Expression(Expression<'a>),
 	/// A print statement.

@@ -10,4 +10,6 @@ pub enum InterpreterError {
 	/// Error for undefined variables
 	#[error("Undefined variable: {0}")]
 	UndefinedVariable(String),
+	#[error("{0}")]
+	InternalError(#[from] anyhow::Error),
 }

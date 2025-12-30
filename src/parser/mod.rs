@@ -27,7 +27,8 @@
 //! program        -> declaration* EOF ;
 //! declaration    -> varDecl | statement ;
 //! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
-//! statement      -> exprStmt | printStmt ;
+//! statement      -> exprStmt | printStmt | block ;
+//! block          → "{" declaration* "}" ;
 //! exprStmt       -> expression ";" ;
 //! printStmt      -> "print" expression ";" ;
 //! expression     -> comma ;
@@ -122,6 +123,18 @@ impl<'a> Parser<'a> {
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Print(expression))
+		} else if matches!(self.peek()?.r#type, TokenType::LeftBrace) {
+			self.advance()?; // consume '{'
+			let mut statements = Vec::new();
+			while !matches!(self.peek()?.r#type, TokenType::RightBrace | TokenType::Eof) {
+				statements.push(self.parse_declaration()?);
+			}
+			// 检查是否真的找到了 RightBrace
+			if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightBrace).into());
+			}
+			self.advance()?; // consume '}'
+			Ok(Statement::Block(statements))
 		} else {
 			let expression = *self.expression()?;
 			if !matches!(self.peek()?.r#type, Semicolon) {

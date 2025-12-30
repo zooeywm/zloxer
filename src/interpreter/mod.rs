@@ -21,11 +21,11 @@ use crate::{LoxError, environment::Environment, error::interpreter::InterpreterE
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter<'a> {
-	environment: Environment<'a>,
+	environment: Box<Environment<'a>>,
 }
 
 impl<'a> Interpreter<'a> {
-	pub fn new() -> Self { Self { environment: Environment::new() } }
+	pub fn new() -> Self { Self { environment: Box::new(Environment::new(None)) } }
 
 	pub fn interpret(&mut self, statements: Vec<Statement<'a>>) -> Result<(), InterpreterError> {
 		for statement in statements {
@@ -50,6 +50,26 @@ impl<'a> Interpreter<'a> {
 					Value::Nil
 				};
 				self.environment.define(name_token, value);
+			}
+			Statement::Block(statements) => {
+				// Take the current environment and create a new one with it as the outer
+				let current_env = std::mem::take(&mut self.environment);
+				*self.environment = Environment::new(Some(current_env));
+
+				// Execute statements in the new environment
+				let mut result = Ok(());
+				for stmt in statements {
+					result = self.interpret_statement(stmt);
+					if result.is_err() {
+						break;
+					}
+				}
+
+				// Restore the original environment by taking the inner environment
+				if let Some(outer) = self.environment.outer.take() {
+					self.environment = outer;
+				}
+				result?
 			}
 		}
 		Ok(())
