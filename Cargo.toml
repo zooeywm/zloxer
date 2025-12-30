@@ -8,3 +8,22 @@ anyhow    = "1.0"
 thiserror = "2.0"
 palc      = "0.0"
 bon       = "3.8"
+rpds      = "1.2"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+lto           = true
+codegen-units = 1
+panic         = "abort"
+
+[profile.minsize]
+inherits      = "release"
+opt-level     = "z"
+debug         = false
+strip         = true
+lto           = true
+codegen-units = 1
+incremental   = false
+panic         = "abort"

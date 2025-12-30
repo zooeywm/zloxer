@@ -32,11 +32,11 @@ pub(crate) use token::*;
 use crate::{LoxError, ScanError, ScanErrorType, ScannerError};
 
 /// A scanner for Lox source code
-pub(crate) struct Scanner<'a> {
+pub(crate) struct Scanner {
 	/// User input source code
-	source:      &'a str,
+	source:      &'static str,
 	/// User input source code iterator
-	source_iter: Peekable<CharIndices<'a>>,
+	source_iter: Peekable<CharIndices<'static>>,
 	/// Points at the beginning of the current lexeme
 	start:       usize,
 	/// Points at the character currently being considered
@@ -46,15 +46,15 @@ pub(crate) struct Scanner<'a> {
 	line:        usize,
 }
 
-impl<'a> Scanner<'a> {
-	pub fn new(source: &'a str) -> Self {
+impl Scanner {
+	pub fn new(source: &'static str) -> Self {
 		let source_iter = source.char_indices().peekable();
 
 		Self { source, source_iter, start: 0, cursor: 0, line: 1 }
 	}
 
 	/// Scan all tokens from the source code
-	pub fn scan_tokens(&'a mut self) -> Result<Vec<Token<'a>>, LoxError> {
+	pub fn scan_tokens(mut self) -> Result<Vec<Token>, LoxError> {
 		let mut tokens = Vec::new();
 		let mut error_count = 0;
 		while let Some(&(index, _)) = self.source_iter.peek() {
@@ -80,7 +80,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	/// Scan a single token from the source code
-	fn scan_token(&mut self, tokens: &mut Vec<Token<'a>>) -> Result<(), ScannerError> {
+	fn scan_token(&mut self, tokens: &mut Vec<Token>) -> Result<(), ScannerError> {
 		let next_char = self.advance().context("Unexpected EOF")?;
 		#[rustfmt::skip]
 		let r#type = match next_char {
@@ -149,7 +149,7 @@ impl<'a> Scanner<'a> {
 	fn peek(&mut self) -> Option<char> { self.source_iter.peek().map(|&(_, c)| c) }
 
 	/// Scan a string literal
-	fn string(&mut self) -> Result<TokenType<'a>, ScannerError> {
+	fn string(&mut self) -> Result<TokenType, ScannerError> {
 		while let Some(c) = self.peek() {
 			if c == '"' {
 				break;
@@ -167,7 +167,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	/// Scan a number literal
-	fn number(&mut self) -> Result<TokenType<'a>, ScannerError> {
+	fn number(&mut self) -> Result<TokenType, ScannerError> {
 		while self.peek().is_some_and(|c| c.is_ascii_digit()) {
 			self.advance();
 		}
@@ -192,7 +192,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	/// Scan an identifier or keyword
-	fn identifier(&mut self) -> TokenType<'a> {
+	fn identifier(&mut self) -> TokenType {
 		while self.peek().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
 			self.advance();
 		}
@@ -207,8 +207,8 @@ mod tests {
 
 	use super::*;
 
-	fn scan(input: &str, ok: bool) {
-		let mut scanner = Scanner::new(input);
+	fn scan(input: &'static str, ok: bool) {
+		let scanner = Scanner::new(input);
 		let result = scanner.scan_tokens();
 		assert!(result.is_ok() == ok);
 	}
@@ -343,7 +343,7 @@ mod tests {
 
 	#[test]
 	fn scan_multiple_tokens() {
-		let mut scanner = Scanner::new("1 + 2");
+		let scanner = Scanner::new("1 + 2");
 		let tokens = scanner.scan_tokens().unwrap();
 		assert_eq!(tokens.len(), 4);
 		assert_eq!(tokens[0].r#type, Number(1.0));
@@ -354,7 +354,7 @@ mod tests {
 
 	#[test]
 	fn scan_string_with_newlines() {
-		let mut scanner = Scanner::new(
+		let scanner = Scanner::new(
 			r#""hello
 world""#,
 		);
@@ -364,7 +364,7 @@ world""#,
 
 	#[test]
 	fn scan_number_precision() {
-		let mut scanner = Scanner::new("3.14159265358979323846264338327950288");
+		let scanner = Scanner::new("3.14159265358979323846264338327950288");
 		let tokens = scanner.scan_tokens().unwrap();
 		assert_eq!(tokens[0].r#type, Number(PI));
 	}

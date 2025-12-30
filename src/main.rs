@@ -2,7 +2,7 @@ use palc::Parser;
 use zloxer::cli::*;
 
 fn main() {
-	let loxer = zloxer::Loxer;
+	let mut loxer = zloxer::Loxer::new();
 
 	match Cli::parse().mode {
 		Mode::File { path } => {

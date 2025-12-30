@@ -53,19 +53,17 @@ use anyhow::anyhow;
 use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::Expression, scanner::{Token, TokenType}, statement::Statement};
 
 /// ParserError is the error type for the parser.
-pub struct Parser<'a> {
+pub struct Parser {
 	/// The tokens to parse.
-	tokens:      Peekable<IntoIter<Token<'a>>>,
+	tokens:      Peekable<IntoIter<Token>>,
 	/// The number of errors encountered during parsing.
 	error_count: usize,
 }
 
-impl<'a> Parser<'a> {
-	pub fn new(tokens: Vec<Token<'a>>) -> Self {
-		Self { tokens: tokens.into_iter().peekable(), error_count: 0 }
-	}
+impl Parser {
+	pub fn new(tokens: Vec<Token>) -> Self { Self { tokens: tokens.into_iter().peekable(), error_count: 0 } }
 
-	pub fn parse(&mut self) -> Result<Vec<Statement<'a>>, LoxError> {
+	pub fn parse(mut self) -> Result<Vec<Statement>, LoxError> {
 		let mut statements = Vec::new();
 		while let Ok(token) = self.peek() {
 			if matches!(token.r#type, TokenType::Eof) {
@@ -83,7 +81,7 @@ impl<'a> Parser<'a> {
 		if self.error_count > 0 { Err(LoxError::ParserErrors(self.error_count)) } else { Ok(statements) }
 	}
 
-	fn parse_declaration(&mut self) -> Result<Statement<'a>, ParserError> {
+	fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
 		if matches!(self.peek()?.r#type, TokenType::Var) {
 			self.var_declaration()
 		} else {
@@ -91,7 +89,7 @@ impl<'a> Parser<'a> {
 		}
 	}
 
-	fn var_declaration(&mut self) -> Result<Statement<'a>, ParserError> {
+	fn var_declaration(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume 'var'
 		let name_token = self.advance()?;
 
@@ -114,7 +112,7 @@ impl<'a> Parser<'a> {
 		Ok(Statement::VarDeclaration { name_token, initializer })
 	}
 
-	fn parse_statement(&mut self) -> Result<Statement<'a>, ParserError> {
+	fn parse_statement(&mut self) -> Result<Statement, ParserError> {
 		if matches!(self.peek()?.r#type, TokenType::Print) {
 			self.advance()?; // consume 'print'
 			let expression = *self.expression()?;
@@ -147,7 +145,7 @@ impl<'a> Parser<'a> {
 
 	/// Parse the tokens into an expression.
 	#[allow(dead_code)]
-	pub fn parse_expression(&mut self) -> Result<Expression<'a>, LoxError> {
+	pub fn parse_expression(mut self) -> Result<Expression, LoxError> {
 		match self.expression() {
 			Ok(expr) => {
 				if self.error_count > 0 {
@@ -162,10 +160,10 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse comma expressions.
-	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> { self.comma() }
+	fn expression(&mut self) -> Result<Box<Expression>, ParserError> { self.comma() }
 
 	/// Parse comma expressions.
-	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn comma(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expr = self.assignment()?;
 
 		while matches!(self.peek()?.r#type, Comma) {
@@ -175,7 +173,7 @@ impl<'a> Parser<'a> {
 		Ok(expr)
 	}
 
-	fn assignment(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn assignment(&mut self) -> Result<Box<Expression>, ParserError> {
 		let expr = self.ternary()?;
 
 		if matches!(self.peek()?.r#type, Equal) {
@@ -192,7 +190,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse ternary expressions.
-	fn ternary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn ternary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let condition = self.equality()?;
 
 		if matches!(self.peek()?.r#type, Question) {
@@ -211,7 +209,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse equality expressions.
-	fn equality(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn equality(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.comparison()?;
 		while matches!(self.peek()?.r#type, BangEqual | EqualEqual) {
 			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
@@ -220,7 +218,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse comparison expressions.
-	fn comparison(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn comparison(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.term()?;
 		while matches!(self.peek()?.r#type, Greater | GreaterEqual | Less | LessEqual) {
 			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
@@ -229,7 +227,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse term expressions.
-	fn term(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn term(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.factor()?;
 		while matches!(self.peek()?.r#type, Minus | Plus) {
 			expression = Expression::binary(expression, self.advance()?, self.factor()?)
@@ -238,7 +236,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse factor expressions.
-	fn factor(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn factor(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.unary()?;
 		while matches!(self.peek()?.r#type, Slash | Star) {
 			expression = Expression::binary(expression, self.advance()?, self.unary()?)
@@ -247,7 +245,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse unary expressions.
-	fn unary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn unary(&mut self) -> Result<Box<Expression>, ParserError> {
 		if matches!(self.peek()?.r#type, Bang | Minus) {
 			return Ok(Expression::unary(self.advance()?, self.unary()?));
 		}
@@ -255,7 +253,7 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse primary expressions.
-	fn primary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+	fn primary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let token = self.peek()?;
 		match &token.r#type {
 			False | True | Nil | Number(_) | String(_) | Identifier(_) => {
@@ -284,14 +282,12 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Advance to the next token.
-	fn advance(&mut self) -> anyhow::Result<Token<'a>> {
+	fn advance(&mut self) -> anyhow::Result<Token> {
 		self.tokens.next().ok_or_else(|| anyhow!("Unexpected EOF"))
 	}
 
 	/// Peek at the current token.
-	fn peek(&mut self) -> anyhow::Result<&Token<'a>> {
-		self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF"))
-	}
+	fn peek(&mut self) -> anyhow::Result<&Token> { self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF")) }
 
 	/// Synchronize the parser after an error.
 	#[allow(dead_code)]
@@ -314,10 +310,10 @@ mod tests {
 	use super::*;
 	use crate::scanner::Scanner;
 
-	fn parse(input: &str, equals: &str) {
-		let mut scanner = Scanner::new(input);
+	fn parse(input: &'static str, equals: &str) {
+		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
+		let parser = Parser::new(tokens);
 		let ast = parser.parse_expression().unwrap();
 		assert_eq!(ast.to_string(), equals);
 	}

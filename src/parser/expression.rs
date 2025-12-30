@@ -10,42 +10,25 @@ use crate::scanner::Token;
 #[allow(clippy::enum_variant_names)]
 /// Expression AST nodes
 #[derive(Debug)]
-pub(crate) enum Expression<'a> {
-	Literal(LiteralValue<'a>),
-	Unary {
-		operator: Token<'a>,
-		right:    Box<Expression<'a>>,
-	},
-	Variable(Token<'a>),
-	Binary {
-		left:     Box<Expression<'a>>,
-		operator: Token<'a>,
-		right:    Box<Expression<'a>>,
-	},
-	Grouping(Box<Expression<'a>>),
-	Comma {
-		left:  Box<Expression<'a>>,
-		right: Box<Expression<'a>>,
-	},
-	Ternary {
-		condition:   Box<Expression<'a>>,
-		then_branch: Box<Expression<'a>>,
-		else_branch: Box<Expression<'a>>,
-	},
-	Assign {
-		target: Token<'a>,
-		value:  Box<Expression<'a>>,
-	},
+pub(crate) enum Expression {
+	Literal(LiteralValue),
+	Unary { operator: Token, right: Box<Expression> },
+	Variable(Token),
+	Binary { left: Box<Expression>, operator: Token, right: Box<Expression> },
+	Grouping(Box<Expression>),
+	Comma { left: Box<Expression>, right: Box<Expression> },
+	Ternary { condition: Box<Expression>, then_branch: Box<Expression>, else_branch: Box<Expression> },
+	Assign { target: Token, value: Box<Expression> },
 }
 
-impl<'a> Expression<'a> {
+impl Expression {
 	// ---------- Unary ----------
-	pub fn unary(operator: Token<'a>, right: Box<Self>) -> Box<Self> {
+	pub fn unary(operator: Token, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Unary { operator, right })
 	}
 
 	// ---------- Binary ----------
-	pub fn binary(left: Box<Self>, operator: Token<'a>, right: Box<Self>) -> Box<Self> {
+	pub fn binary(left: Box<Self>, operator: Token, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Binary { left, operator, right })
 	}
 
@@ -58,7 +41,7 @@ impl<'a> Expression<'a> {
 	// ---------- Grouping ----------
 	pub fn grouping(expr: Box<Self>) -> Box<Self> { Box::new(Expression::Grouping(expr)) }
 
-	pub fn assign(name: Token<'a>, value: Box<Self>) -> Box<Self> {
+	pub fn assign(name: Token, value: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Assign { target: name, value })
 	}
 }
@@ -66,17 +49,17 @@ impl<'a> Expression<'a> {
 #[allow(clippy::enum_variant_names)]
 /// Literal values in the AST
 #[derive(Debug)]
-pub(crate) enum LiteralValue<'a> {
+pub(crate) enum LiteralValue {
 	Number(f64),
-	StringLiteral(&'a str),
+	StringLiteral(&'static str),
 	Boolean(bool),
 	Nil,
 }
 
-impl<'a> TryFrom<Token<'a>> for Expression<'a> {
+impl TryFrom<Token> for Expression {
 	type Error = anyhow::Error;
 
-	fn try_from(token: Token<'a>) -> Result<Self, Self::Error> {
+	fn try_from(token: Token) -> Result<Self, Self::Error> {
 		use crate::scanner::TokenType::*;
 
 		Ok(match token.r#type {
@@ -91,7 +74,7 @@ impl<'a> TryFrom<Token<'a>> for Expression<'a> {
 	}
 }
 
-impl std::fmt::Display for Expression<'_> {
+impl std::fmt::Display for Expression {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Literal(lit) => write!(f, "{lit}"),
@@ -108,7 +91,7 @@ impl std::fmt::Display for Expression<'_> {
 	}
 }
 
-impl std::fmt::Display for LiteralValue<'_> {
+impl std::fmt::Display for LiteralValue {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			LiteralValue::Number(n) => write!(f, "{n}"),

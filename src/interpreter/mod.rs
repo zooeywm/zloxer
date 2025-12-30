@@ -20,21 +20,21 @@ use value::Value;
 use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::TokenType::*, statement::Statement};
 
 /// Interpreter that evaluates Lox expressions.
-pub struct Interpreter<'a> {
-	environment: Box<Environment<'a>>,
+pub struct Interpreter {
+	environment: Box<Environment>,
 }
 
-impl<'a> Interpreter<'a> {
+impl Interpreter {
 	pub fn new() -> Self { Self { environment: Box::new(Environment::new(None)) } }
 
-	pub fn interpret(&mut self, statements: Vec<Statement<'a>>) -> Result<(), InterpreterError> {
+	pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<(), InterpreterError> {
 		for statement in statements {
 			self.interpret_statement(statement)?;
 		}
 		Ok(())
 	}
 
-	fn interpret_statement(&mut self, statement: Statement<'a>) -> Result<(), InterpreterError> {
+	fn interpret_statement(&mut self, statement: Statement) -> Result<(), InterpreterError> {
 		match statement {
 			Statement::Expression(expression) => {
 				self.evaluate(expression)?;
@@ -77,14 +77,14 @@ impl<'a> Interpreter<'a> {
 
 	/// Interpret the given expression and print the result.
 	#[allow(dead_code)]
-	pub fn interpret_expression(&mut self, expr: Expression<'a>) -> Result<(), LoxError> {
+	pub fn interpret_expression(&mut self, expr: Expression) -> Result<(), LoxError> {
 		let value = self.evaluate(expr)?;
 		println!("{value}");
 		Ok(())
 	}
 
 	/// Evaluate the given expression and return its value.
-	fn evaluate(&mut self, expr: Expression<'a>) -> Result<Value, InterpreterError> {
+	fn evaluate(&mut self, expr: Expression) -> Result<Value, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => match lit {
 				LiteralValue::Nil => Value::Nil,
@@ -141,10 +141,10 @@ mod tests {
 	use super::*;
 	use crate::{parser::Parser, scanner::Scanner};
 
-	fn run(input: &str) -> Result<Value, InterpreterError> {
-		let mut scanner = Scanner::new(input);
+	fn run(input: &'static str) -> Result<Value, InterpreterError> {
+		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
+		let parser = Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 		let mut interpreter = Interpreter::new();
 
@@ -163,9 +163,9 @@ mod tests {
 		assert!(result.is_ok());
 
 		// Test variable reference
-		let mut scanner = Scanner::new("var x = 10; print x;");
+		let scanner = Scanner::new("var x = 10; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
+		let parser = Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 		let mut interpreter = Interpreter::new();
 
@@ -174,9 +174,9 @@ mod tests {
 
 	#[test]
 	fn test_variable_assignment() {
-		let mut scanner = Scanner::new("var x = 10; x = 20; print x;");
+		let scanner = Scanner::new("var x = 10; x = 20; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
+		let parser = Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 		let mut interpreter = Interpreter::new();
 
@@ -186,9 +186,9 @@ mod tests {
 
 	#[test]
 	fn test_undefined_variable() {
-		let mut scanner = Scanner::new("print undefined_var;");
+		let scanner = Scanner::new("print undefined_var;");
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = Parser::new(tokens);
+		let parser = Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 		let mut interpreter = Interpreter::new();
 

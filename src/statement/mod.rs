@@ -6,18 +6,18 @@ use crate::{parser::expression::Expression, scanner::Token};
 
 /// A statement in the programming language.
 #[derive(Debug)]
-pub enum Statement<'a> {
-	Block(Vec<Statement<'a>>),
+pub enum Statement {
+	Block(Vec<Statement>),
 	/// An expression used as a statement.
-	Expression(Expression<'a>),
+	Expression(Expression),
 	/// A print statement.
-	Print(Expression<'a>),
+	Print(Expression),
 	/// A variable declaration statement.
 	VarDeclaration {
 		/// The token of the variable being declared.
-		name_token:  Token<'a>,
+		name_token:  Token,
 		/// An optional initializer expression.
-		initializer: Option<Expression<'a>>,
+		initializer: Option<Expression>,
 	},
 }
 
@@ -26,21 +26,21 @@ mod tests {
 	use crate::scanner::Scanner;
 
 	/// Helper function to parse a string into statements and return the count
-	fn parse_statement_count(input: &str) -> usize {
-		let mut scanner = Scanner::new(input);
+	fn parse_statement_count(input: &'static str) -> usize {
+		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = crate::parser::Parser::new(tokens);
+		let parser = crate::parser::Parser::new(tokens);
 		parser.parse().unwrap().len()
 	}
 
 	/// Helper function to parse a string and check if the first statement matches
 	/// expected type
-	fn parse_statement_type(input: &str, expected_type: &str) -> bool {
+	fn parse_statement_type(input: &'static str, expected_type: &str) -> bool {
 		use crate::statement::Statement;
 
-		let mut scanner = Scanner::new(input);
+		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = crate::parser::Parser::new(tokens);
+		let parser = crate::parser::Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 
 		match expected_type {
@@ -52,12 +52,12 @@ mod tests {
 	}
 
 	/// Helper function to parse a variable declaration and check its properties
-	fn parse_var_declaration(input: &str, name: &str, has_initializer: bool) -> bool {
+	fn parse_var_declaration(input: &'static str, name: &str, has_initializer: bool) -> bool {
 		use crate::statement::Statement;
 
-		let mut scanner = Scanner::new(input);
+		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = crate::parser::Parser::new(tokens);
+		let parser = crate::parser::Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 
 		match &statements[0] {
@@ -112,9 +112,9 @@ mod tests {
 		assert!(parse_statement_type("x + 1;", "expression"));
 
 		// Test variable followed by print of the variable
-		let mut scanner = Scanner::new("var x = 5; print x;");
+		let scanner = Scanner::new("var x = 5; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
-		let mut parser = crate::parser::Parser::new(tokens);
+		let parser = crate::parser::Parser::new(tokens);
 		let statements = parser.parse().unwrap();
 
 		use crate::statement::Statement;

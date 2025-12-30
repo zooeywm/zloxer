@@ -2,22 +2,22 @@ use std::fmt::Display;
 
 /// A token produced by the scanner
 #[derive(Debug, Clone)]
-pub(crate) struct Token<'a> {
+pub(crate) struct Token {
 	/// The type of the token.
-	pub r#type: TokenType<'a>,
+	pub r#type: TokenType,
 	/// The lexeme (string representation) of the token.
-	pub lexeme: &'a str,
+	pub lexeme: &'static str,
 	/// The line number where the token was found.
 	pub line:   usize,
 }
 
-impl<'a> Token<'a> {
-	pub fn new(r#type: TokenType<'a>, lexeme: &'a str, line: usize) -> Self { Self { r#type, lexeme, line } }
+impl Token {
+	pub fn new(r#type: TokenType, lexeme: &'static str, line: usize) -> Self { Self { r#type, lexeme, line } }
 }
 
 /// The different types of tokens in Lox, The copying is lightweight
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum TokenType<'a> {
+pub(crate) enum TokenType {
 	/// New Line Character `\n`.
 	NewLine,
 	/// Empty Character: ` `, `\r`, `\t`.
@@ -67,9 +67,9 @@ pub(crate) enum TokenType<'a> {
 	/// Less than or equal `<=`.
 	LessEqual,
 	/// Identifier, e.g. variable or function name.
-	Identifier(&'a str),
+	Identifier(&'static str),
 	/// String literal, e.g. `"hello"`.
-	String(&'a str),
+	String(&'static str),
 	/// Number literal, e.g. `123.45`.
 	Number(f64),
 	/// Logical AND keyword.
@@ -108,7 +108,7 @@ pub(crate) enum TokenType<'a> {
 	Eof,
 }
 
-impl Display for TokenType<'_> {
+impl Display for TokenType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			TokenType::Identifier(name) => write!(f, "Identifier({})", name),
@@ -119,7 +119,7 @@ impl Display for TokenType<'_> {
 	}
 }
 
-impl<'a> TokenType<'a> {
+impl TokenType {
 	/// Check if the token type is to be ignored (whitespace, new lines,
 	/// comments).
 	pub fn is_ignored(&self) -> bool {
@@ -127,7 +127,7 @@ impl<'a> TokenType<'a> {
 	}
 
 	/// Determine if a given string is a keyword or an identifier.
-	pub fn keyword_or_identifier(value: &'a str) -> Self {
+	pub fn keyword_or_identifier(value: &'static str) -> Self {
 		match value {
 			"and" => TokenType::And,
 			"class" => TokenType::Class,
