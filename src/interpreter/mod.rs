@@ -57,14 +57,14 @@ impl<'a> Interpreter<'a> {
 
 	/// Interpret the given expression and print the result.
 	#[allow(dead_code)]
-	pub fn interpret_expression(&'a self, expr: Expression<'a>) -> Result<(), LoxError> {
+	pub fn interpret_expression(&mut self, expr: Expression<'a>) -> Result<(), LoxError> {
 		let value = self.evaluate(expr)?;
 		println!("{value}");
 		Ok(())
 	}
 
 	/// Evaluate the given expression and return its value.
-	fn evaluate(&'a self, expr: Expression<'a>) -> Result<Value, InterpreterError> {
+	fn evaluate(&mut self, expr: Expression<'a>) -> Result<Value, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => match lit {
 				LiteralValue::Nil => Value::Nil,
@@ -101,7 +101,78 @@ impl<'a> Interpreter<'a> {
 				let condition_value = self.evaluate(*condition)?;
 				if condition_value.to_bool() { self.evaluate(*then_branch)? } else { self.evaluate(*else_branch)? }
 			}
-			Variable(_) => todo!(),
+			Variable(token) => {
+				let value = self.environment.get(&token).ok_or_else(|| {
+					InterpreterError::UndefinedVariable(format!("line {}: '{}'", token.line, token.lexeme))
+				})?;
+				value.clone()
+			}
+			Assign { target, value } => {
+				let value = self.evaluate(*value)?;
+				self.environment.assign(&target, value.clone())?;
+				value
+			}
 		})
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::{parser::Parser, scanner::Scanner};
+
+	fn run(input: &str) -> Result<Value, InterpreterError> {
+		let mut scanner = Scanner::new(input);
+		let tokens = scanner.scan_tokens().unwrap();
+		let mut parser = Parser::new(tokens);
+		let statements = parser.parse().unwrap();
+		let mut interpreter = Interpreter::new();
+
+		// Execute all statements
+		for statement in statements {
+			interpreter.interpret_statement(statement)?;
+		}
+
+		Ok(Value::Nil)
+	}
+
+	#[test]
+	fn test_variable_declaration() {
+		// Test variable declaration
+		let result = run("var x = 10;");
+		assert!(result.is_ok());
+
+		// Test variable reference
+		let mut scanner = Scanner::new("var x = 10; print x;");
+		let tokens = scanner.scan_tokens().unwrap();
+		let mut parser = Parser::new(tokens);
+		let statements = parser.parse().unwrap();
+		let mut interpreter = Interpreter::new();
+
+		assert!(interpreter.interpret(statements).is_ok());
+	}
+
+	#[test]
+	fn test_variable_assignment() {
+		let mut scanner = Scanner::new("var x = 10; x = 20; print x;");
+		let tokens = scanner.scan_tokens().unwrap();
+		let mut parser = Parser::new(tokens);
+		let statements = parser.parse().unwrap();
+		let mut interpreter = Interpreter::new();
+
+		// Test assignment and print
+		assert!(interpreter.interpret(statements).is_ok());
+	}
+
+	#[test]
+	fn test_undefined_variable() {
+		let mut scanner = Scanner::new("print undefined_var;");
+		let tokens = scanner.scan_tokens().unwrap();
+		let mut parser = Parser::new(tokens);
+		let statements = parser.parse().unwrap();
+		let mut interpreter = Interpreter::new();
+
+		// Test undefined variable should cause error
+		assert!(interpreter.interpret(statements).is_err());
 	}
 }

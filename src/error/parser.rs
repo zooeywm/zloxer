@@ -34,6 +34,8 @@ pub enum ParseErrorType {
 	ExpectSemicolon,
 	/// Error for missing variable name in variable declaration.
 	ExpectVariableName,
+	/// Error for invalid assignment target.
+	InvalidAssignmentTarget,
 }
 
 impl std::fmt::Display for ParseErrorType {
@@ -44,6 +46,7 @@ impl std::fmt::Display for ParseErrorType {
 			UnexpectedToken(e) => write!(f, "Unexpected token: {e}"),
 			ExpectSemicolon => write!(f, "Expect ';' at the end of statement."),
 			ExpectVariableName => write!(f, "Expect variable name in declaration."),
+			InvalidAssignmentTarget => write!(f, "Invalid assignment target."),
 		}
 	}
 }

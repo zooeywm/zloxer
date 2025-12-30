@@ -7,4 +7,7 @@ pub enum InterpreterError {
 	/// Error for invalid binary operations
 	#[error("Invalid binary operation: {0}")]
 	BinaryOperationError(String),
+	/// Error for undefined variables
+	#[error("Undefined variable: {0}")]
+	UndefinedVariable(String),
 }

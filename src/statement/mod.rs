@@ -2,7 +2,7 @@
 //! are allowed. The operands of, say, `+` are always expressions, never
 //! statements. The body of a `while` loop is always a statement.
 
-use crate::{parser::expression::Expression, scanner::{Scanner, Token}};
+use crate::{parser::expression::Expression, scanner::Token};
 
 /// A statement in the programming language.
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub enum Statement<'a> {
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+	use crate::scanner::Scanner;
 
 	/// Helper function to parse a string into statements and return the count
 	fn parse_statement_count(input: &str) -> usize {

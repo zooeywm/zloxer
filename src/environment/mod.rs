@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{interpreter::value::Value, scanner::Token};
+use crate::{error::interpreter::InterpreterError, interpreter::value::Value, scanner::Token};
 
 pub struct Environment<'a> {
 	pub variables: HashMap<&'a str, Value>,
@@ -13,5 +13,14 @@ impl<'a> Environment<'a> {
 	/// used to redefine an existing variable.
 	pub fn define(&mut self, token: Token<'a>, value: Value) { self.variables.insert(token.lexeme, value); }
 
-	pub fn get(&self, token: Token<'a>) -> Option<&Value> { self.variables.get(token.lexeme) }
+	pub fn get(&self, token: &Token<'a>) -> Option<&Value> { self.variables.get(token.lexeme) }
+
+	/// Assign a value to an existing variable.
+	pub fn assign(&mut self, token: &Token<'a>, value: Value) -> Result<(), InterpreterError> {
+		self
+			.variables
+			.get_mut(token.lexeme)
+			.map(|v| *v = value)
+			.ok_or_else(|| InterpreterError::UndefinedVariable(format!("line {}: '{}'", token.line, token.lexeme)))
+	}
 }

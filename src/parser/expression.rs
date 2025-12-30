@@ -32,6 +32,10 @@ pub(crate) enum Expression<'a> {
 		then_branch: Box<Expression<'a>>,
 		else_branch: Box<Expression<'a>>,
 	},
+	Assign {
+		target: Token<'a>,
+		value:  Box<Expression<'a>>,
+	},
 }
 
 impl<'a> Expression<'a> {
@@ -53,6 +57,10 @@ impl<'a> Expression<'a> {
 
 	// ---------- Grouping ----------
 	pub fn grouping(expr: Box<Self>) -> Box<Self> { Box::new(Expression::Grouping(expr)) }
+
+	pub fn assign(name: Token<'a>, value: Box<Self>) -> Box<Self> {
+		Box::new(Expression::Assign { target: name, value })
+	}
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -95,6 +103,7 @@ impl std::fmt::Display for Expression<'_> {
 				write!(f, "(? {condition} : {then_branch} {else_branch})")
 			}
 			Variable(token) => write!(f, "{}", token.lexeme),
+			Assign { target: name, value } => write!(f, "(= {} {value})", name.lexeme),
 		}
 	}
 }

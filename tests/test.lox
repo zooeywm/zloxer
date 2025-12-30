@@ -1,7 +1,31 @@
 // First Lox program
 // There are no parentheses around the string because print is a built-in statement, and not a library function.
 // print "Hello, world!";
-// (){},.      -+;*!!====<<=>>=/     
-// ()>>>="This is a 
+// (){},.      -+;*!!====<<=>>=/
+// ()>>>="This is a
 // string"
 print 1 + 3 + 4;
+
+// Variable declaration and assignment test
+var a = 5;
+print a;
+a = 10;
+print a;
+
+// Test with multiple variables
+var b = 2;
+var c = "hello";
+print b;
+print c;
+
+// Test boolean assignment
+var isTrue = true;
+print isTrue;
+isTrue = false;
+print isTrue;
+
+// Test nil assignment
+var n = nil;
+print n;
+n = 42;
+print n;

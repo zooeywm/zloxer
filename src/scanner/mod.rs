@@ -187,7 +187,7 @@ impl<'a> Scanner<'a> {
 	/// Peek the second character ahead
 	fn peek_second(&mut self) -> Option<char> {
 		let mut it = self.source_iter.clone();
-		it.next()?; // 跳过当前 peek 的字符
+		it.next()?; // Skip the current peek character
 		it.peek().map(|&(_, c)| c)
 	}
 
@@ -221,12 +221,12 @@ mod tests {
 		scan(" ( ) ", true);
 		scan("@", false);
 		scan("你好", false);
-		scan(r#""世界""#, true);
+		scan(r#""world""#, true);
 		scan("12345", true);
 		scan(
 			r#""/* Block
-        注释📻
-        */""#,
+	        Comment📻
+	        */""#,
 			true,
 		);
 		scan(

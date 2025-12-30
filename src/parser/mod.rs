@@ -21,7 +21,7 @@
 //! Factor|* /|Left
 //! Unary|! -|Right
 //!
-//! Expression grammar:
+//! Lox Expression grammar:
 //!
 //! ``` BNF
 //! program        -> declaration* EOF ;
@@ -31,7 +31,8 @@
 //! exprStmt       -> expression ";" ;
 //! printStmt      -> "print" expression ";" ;
 //! expression     -> comma ;
-//! comma          -> ternary ( "," ternary )* ;
+//! comma          -> assignment ( "," assignment )* ;
+//! assignment     -> IDENTIFIER "=" assignment | ternary ;
 //! ternary        -> equality ( "?" expression ":" ternary )? ;
 //! equality       -> comparison ( ( "!=" | "==" ) comparison )* ;
 //! comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
@@ -48,18 +49,12 @@ use std::{convert::TryInto, iter::Peekable, vec::IntoIter};
 use TokenType::*;
 use anyhow::anyhow;
 
-use crate::{
-	LoxError,
-	error::parser::{ParseError, ParseErrorType, ParserError},
-	parser::expression::Expression,
-	scanner::{Token, TokenType},
-	statement::Statement,
-};
+use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::Expression, scanner::{Token, TokenType}, statement::Statement};
 
 /// ParserError is the error type for the parser.
 pub struct Parser<'a> {
 	/// The tokens to parse.
-	tokens: Peekable<IntoIter<Token<'a>>>,
+	tokens:      Peekable<IntoIter<Token<'a>>>,
 	/// The number of errors encountered during parsing.
 	error_count: usize,
 }
@@ -154,23 +149,39 @@ impl<'a> Parser<'a> {
 	}
 
 	/// Parse comma expressions.
-	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
-		self.comma()
-	}
+	fn expression(&mut self) -> Result<Box<Expression<'a>>, ParserError> { self.comma() }
 
 	/// Parse comma expressions.
 	fn comma(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
-		let mut expr = self.ternary()?;
+		let mut expr = self.assignment()?;
+
 		while matches!(self.peek()?.r#type, Comma) {
 			self.advance()?;
-			expr = Expression::comma(expr, self.ternary()?)
+			expr = Expression::comma(expr, self.assignment()?)
 		}
+		Ok(expr)
+	}
+
+	fn assignment(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
+		let expr = self.ternary()?;
+
+		if matches!(self.peek()?.r#type, Equal) {
+			let equals = self.advance()?;
+			if let Expression::Variable(name_token) = *expr {
+				let value = self.assignment()?;
+				return Ok(Expression::assign(name_token, value));
+			} else {
+				return Err(ParseError::new(equals.line, ParseErrorType::InvalidAssignmentTarget).into());
+			}
+		}
+
 		Ok(expr)
 	}
 
 	/// Parse ternary expressions.
 	fn ternary(&mut self) -> Result<Box<Expression<'a>>, ParserError> {
 		let condition = self.equality()?;
+
 		if matches!(self.peek()?.r#type, Question) {
 			self.advance()?;
 			let then_branch = self.expression()?;
@@ -252,7 +263,7 @@ impl<'a> Parser<'a> {
 			_ => {
 				let err_string = token.lexeme.to_string();
 				let error = ParseError::new(token.line, ParseErrorType::UnexpectedToken(err_string));
-				self.synchronize(&error);
+				self.synchronize(&error)?;
 				self.advance()?; // consume unexpected token
 				Err(error.into())
 			}

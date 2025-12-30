@@ -4,7 +4,7 @@ use Value::*;
 
 #[allow(clippy::enum_variant_names)]
 /// Value represents a runtime value in Lox.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
 	Nil,
 	Boolean(bool),
@@ -141,8 +141,6 @@ impl Value {
 			(StringLiteral(l), StringLiteral(r)) => l == r,
 			(Nil, _) => false,
 			(_, Nil) => false,
-
-			// 不允许比较的情况
 			_ => return None,
 		})
 	}
