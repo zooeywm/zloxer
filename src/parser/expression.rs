@@ -16,6 +16,7 @@ pub(crate) enum Expression {
 	Unary { operator: Token, right: Box<Expression> },
 	Variable(Token),
 	Binary { left: Box<Expression>, operator: Token, right: Box<Expression> },
+	Call { callee: Box<Expression>, paren: Token, arguments: Vec<Expression> },
 	Grouping(Box<Expression>),
 	Comma { left: Box<Expression>, right: Box<Expression> },
 	Ternary { condition: Box<Expression>, then_branch: Box<Expression>, else_branch: Box<Expression> },
@@ -45,6 +46,10 @@ impl Expression {
 
 	pub fn logical(left: Box<Self>, operator: Token, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Logical { left, operator, right })
+	}
+
+	pub fn call(callee: Box<Self>, paren: Token, arguments: Vec<Self>) -> Box<Self> {
+		Box::new(Expression::Call { callee, paren, arguments })
 	}
 }
 
@@ -90,6 +95,11 @@ impl std::fmt::Display for Expression {
 			Variable(token) => write!(f, "{}", token.lexeme),
 			Assign { target: name, value } => write!(f, "(= {} {value})", name.lexeme),
 			Logical { left, operator, right } => write!(f, "({} {left} {right})", operator.lexeme),
+			Call { callee, paren: _, arguments } => write!(
+				f,
+				"(call {callee} ({}) )",
+				arguments.iter().map(|arg| format!("{arg}")).collect::<Vec<String>>().join(" ")
+			),
 		}
 	}
 }

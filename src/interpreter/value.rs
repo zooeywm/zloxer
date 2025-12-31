@@ -1,30 +1,34 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use Value::*;
 
+use crate::{error::interpreter::InterpreterError, interpreter::callable::CallableValue, scanner::Token};
+
 #[allow(clippy::enum_variant_names)]
+#[derive(Debug)]
 /// Value represents a runtime value in Lox.
-#[derive(Debug, Clone)]
 pub enum Value {
 	Nil,
 	Boolean(bool),
 	Number(f64),
 	StringValue(String),
+	Callable(CallableValue),
 }
 
 impl Display for Value {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Value::Nil => write!(f, "nil"),
-			Value::Boolean(b) => write!(f, "{b}"),
-			Value::Number(n) => {
+			Nil => write!(f, "nil"),
+			Boolean(b) => write!(f, "{b}"),
+			Number(n) => {
 				if n.is_finite() && n.fract() == 0.0 {
 					write!(f, "{}", *n as i64)
 				} else {
 					write!(f, "{n}")
 				}
 			}
-			Value::StringValue(s) => write!(f, "{s}"),
+			StringValue(s) => write!(f, "{s}"),
+			Callable { .. } => write!(f, "<callable>"),
 		}
 	}
 }
@@ -53,10 +57,11 @@ impl Value {
 	/// Determines if the value is considered "true" in a boolean context.
 	pub fn to_bool(&self) -> bool {
 		match self {
-			Value::Nil => false,
-			Value::Boolean(b) => *b,
-			Value::StringValue(s) => !s.is_empty(),
-			Value::Number(n) => *n != 0.0,
+			Nil => false,
+			Boolean(b) => *b,
+			StringValue(s) => !s.is_empty(),
+			Number(n) => *n != 0.0,
+			Callable { .. } => true,
 		}
 	}
 
@@ -147,4 +152,25 @@ impl Value {
 
 	/// Tries to compare two values for inequality.
 	pub fn bang_equal(&self, other: &Self) -> Option<bool> { Some(!self.equal(other)?) }
+
+	pub fn call(
+		&self,
+		paren: &Token,
+		args: &[Rc<RefCell<Value>>],
+	) -> Result<Rc<RefCell<Value>>, InterpreterError> {
+		match self {
+			Callable(callable) => {
+				if args.len() != callable.arity {
+					return Err(InterpreterError::ArgumentError(format!(
+						"line {}: Expected {} arguments but got {}.",
+						paren.line,
+						callable.arity,
+						args.len()
+					)));
+				}
+				Ok(callable.call(args))
+			}
+			_ => Err(InterpreterError::NotCallable(format!("line {}: '{self}'", paren.line))),
+		}
+	}
 }

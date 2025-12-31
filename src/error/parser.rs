@@ -40,6 +40,8 @@ pub enum ParseErrorType {
 	ExpectRightBrace,
 	/// Error for missing variable name in variable declaration.
 	ExpectVariableName,
+	/// Error for too many arguments in function call.
+	TooManyArguments,
 	/// Error for invalid assignment target.
 	InvalidAssignmentTarget,
 }
@@ -56,6 +58,7 @@ impl std::fmt::Display for ParseErrorType {
 			ExpectRightBrace => write!(f, "Expect '}}' to close the block."),
 			ExpectLeftParen => write!(f, "Expect '(' after keyword."),
 			ExpectRightParen => write!(f, "Expect ')' after expression."),
+			TooManyArguments => write!(f, "Cannot have more than 255 arguments."),
 		}
 	}
 }

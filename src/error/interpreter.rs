@@ -15,6 +15,10 @@ pub enum InterpreterError {
 	/// Error for break statements
 	#[error("Break statement")]
 	Break,
+	#[error("Not callable: {0}")]
+	NotCallable(String),
+	#[error("Argument error: {0}")]
+	ArgumentError(String),
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

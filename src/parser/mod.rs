@@ -45,7 +45,9 @@
 //! comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 //! term           -> factor ( ( "-" | "+" ) factor )* ;
 //! factor         -> unary ( ( "/" | "*" ) unary )* ;
-//! unary          -> ( "!" | "-" ) unary | primary ;
+//! unary          -> ( "!" | "-" ) unary | call ;
+//! call           -> primary ( "(" arguments? ")" )* ;
+//! arguments      -> expression ( "," expression )* ;
 //! primary        -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 //! ```
 
@@ -349,7 +351,36 @@ impl Parser {
 		if matches!(self.peek()?.r#type, Bang | Minus) {
 			return Ok(Expression::unary(self.advance()?, self.unary()?));
 		}
-		self.primary()
+		self.call()
+	}
+
+	fn call(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expr = self.primary()?;
+
+		while matches!(self.peek()?.r#type, LeftParen) {
+			self.advance()?; // consume '('
+			let mut arguments = Vec::new();
+			if !matches!(self.peek()?.r#type, RightParen) {
+				loop {
+					if arguments.len() >= 255 {
+						return Err(ParseError::new(self.peek()?.line, ParseErrorType::TooManyArguments).into());
+					}
+					arguments.push(*self.expression()?);
+					if !matches!(self.peek()?.r#type, Comma) {
+						break;
+					}
+					self.advance()?; // consume ','
+				}
+			}
+			if !matches!(self.peek()?.r#type, RightParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::UnterminatedParenthesis).into());
+			}
+			self.advance()?; // consume ')'
+
+			expr = Expression::call(expr, self.peek()?.clone(), arguments);
+		}
+
+		Ok(expr)
 	}
 
 	/// Parse primary expressions.
