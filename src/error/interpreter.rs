@@ -10,6 +10,8 @@ pub enum InterpreterError {
 	/// Error for undefined variables
 	#[error("Undefined variable: {0}")]
 	UndefinedVariable(String),
+	#[error("Invalid logical operation: {0}")]
+	LogicalOperationError(String),
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

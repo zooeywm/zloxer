@@ -29,12 +29,12 @@ impl Interpreter {
 
 	pub fn interpret_statements(&mut self, statements: Vec<Statement>) -> Result<(), InterpreterError> {
 		for statement in statements {
-			self.interpret_statement(statement)?;
+			self.interpret_statement(&statement)?;
 		}
 		Ok(())
 	}
 
-	fn interpret_statement(&mut self, statement: Statement) -> Result<(), InterpreterError> {
+	fn interpret_statement(&mut self, statement: &Statement) -> Result<(), InterpreterError> {
 		match statement {
 			Statement::Expression(expression) => {
 				self.evaluate(expression)?;
@@ -71,28 +71,41 @@ impl Interpreter {
 				}
 				result?
 			}
+			Statement::If { condition, then_branch, else_branch } => {
+				let condition_value = self.evaluate(condition)?;
+				if condition_value.to_bool() {
+					self.interpret_statement(then_branch)?
+				} else if let Some(else_branch) = else_branch {
+					self.interpret_statement(else_branch)?
+				}
+			}
+			Statement::While { condition, body } => {
+				while self.evaluate(condition)?.to_bool() {
+					self.interpret_statement(body)?;
+				}
+			}
 		}
 		Ok(())
 	}
 
 	/// Interpret the given expression and print the result.
 	pub fn interpret_expression(&mut self, expr: Expression) -> Result<(), LoxError> {
-		let value = self.evaluate(expr)?;
+		let value = self.evaluate(&expr)?;
 		println!("{value}");
 		Ok(())
 	}
 
 	/// Evaluate the given expression and return its value.
-	fn evaluate(&mut self, expr: Expression) -> Result<Value, InterpreterError> {
+	fn evaluate(&mut self, expr: &Expression) -> Result<Value, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => match lit {
 				LiteralValue::Nil => Value::Nil,
-				Boolean(b) => Value::Boolean(b),
-				LiteralValue::Number(n) => Value::Number(n),
+				Boolean(b) => Value::Boolean(*b),
+				LiteralValue::Number(n) => Value::Number(*n),
 				StringLiteral(s) => Value::StringValue(s.to_string()),
 			},
 			Unary { operator, right } => {
-				let right_value = self.evaluate(*right)?;
+				let right_value = self.evaluate(right)?;
 				match (&operator.r#type, &right_value) {
 					(Minus, Value::Number(n)) => Value::Number(-n),
 					(Bang, v) => Value::Boolean(!v.to_bool()),
@@ -105,31 +118,56 @@ impl Interpreter {
 				}
 			}
 			Binary { left, operator, right } => {
-				let left_value = self.evaluate(*left)?;
-				let right_value = self.evaluate(*right)?;
+				let left_value = self.evaluate(left)?;
+				let right_value = self.evaluate(right)?;
 				left_value.binary_op(&operator.r#type, &right_value).ok_or(InterpreterError::BinaryOperationError(
 					format!("line {}: {left_value} {} {right_value}", operator.line, operator.lexeme),
 				))?
 			}
-			Grouping(inner) => self.evaluate(*inner)?,
+			Grouping(inner) => self.evaluate(inner)?,
 			CommaExpression { left, right } => {
-				self.evaluate(*left)?;
-				self.evaluate(*right)?
+				self.evaluate(left)?;
+				self.evaluate(right)?
 			}
 			Ternary { condition, then_branch, else_branch } => {
-				let condition_value = self.evaluate(*condition)?;
-				if condition_value.to_bool() { self.evaluate(*then_branch)? } else { self.evaluate(*else_branch)? }
+				let condition_value = self.evaluate(condition)?;
+				if condition_value.to_bool() { self.evaluate(then_branch)? } else { self.evaluate(else_branch)? }
 			}
 			Variable(token) => {
-				let value = self.environment.get(&token).ok_or_else(|| {
+				let value = self.environment.get(token).ok_or_else(|| {
 					InterpreterError::UndefinedVariable(format!("line {}: '{}'", token.line, token.lexeme))
 				})?;
 				value.clone()
 			}
 			Assign { target, value } => {
-				let value = self.evaluate(*value)?;
-				self.environment.assign(&target, value.clone())?;
+				let value = self.evaluate(value)?;
+				self.environment.assign(target, value.clone())?;
 				value
+			}
+			Logical { left, operator, right } => {
+				let left_value = self.evaluate(left)?;
+				match operator.r#type {
+					And => {
+						if !left_value.to_bool() {
+							left_value
+						} else {
+							self.evaluate(right)?
+						}
+					}
+					Or => {
+						if left_value.to_bool() {
+							left_value
+						} else {
+							self.evaluate(right)?
+						}
+					}
+					_ => {
+						return Err(InterpreterError::LogicalOperationError(format!(
+							"line {}: invalid logical operator {:?}",
+							operator.line, operator.r#type
+						)));
+					}
+				}
 			}
 		})
 	}
@@ -149,7 +187,7 @@ mod tests {
 
 		// Execute all statements
 		for statement in statements {
-			interpreter.interpret_statement(statement)?;
+			interpreter.interpret_statement(&statement)?;
 		}
 
 		Ok(Value::Nil)

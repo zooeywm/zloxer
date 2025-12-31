@@ -24,17 +24,22 @@
 //! Lox Expression grammar:
 //!
 //! ``` BNF
-//! program        -> declaration* EOF ;
-//! declaration    -> varDecl | statement ;
-//! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
-//! statement      -> exprStmt | printStmt | block ;
-//! block          → "{" declaration* "}" ;
+//! program        -> statement* EOF ;
+//! statement      -> exprStmt | ifStmt | whileStmt | forStmt | printStmt | block | varDecl ;
 //! exprStmt       -> expression ";" ;
+//! ifStmt         -> "if" "(" expression ")" statement ( "else" statement )? ;
+//! whileStmt      -> "while" "(" expression ")" statement ;
+//! forStmt        -> "for" "(" ( varDecl | exprStmt | ";" )
+//!                   expression? ";" expression? ")" statement;
 //! printStmt      -> "print" expression ";" ;
+//! block          -> "{" declaration* "}" ;
+//! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
 //! expression     -> comma ;
 //! comma          -> assignment ( "," assignment )* ;
 //! assignment     -> IDENTIFIER "=" assignment | ternary ;
-//! ternary        -> equality ( "?" expression ":" ternary )? ;
+//! ternary        -> logicOr ( "?" expression ":" ternary )? ;
+//! logicOr        -> logicAnd ( "or" logicAnd )* ;
+//! logicAnd       -> equality ( "and" equality )* ;
 //! equality       -> comparison ( ( "!=" | "==" ) comparison )* ;
 //! comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 //! term           -> factor ( ( "-" | "+" ) factor )* ;
@@ -50,7 +55,7 @@ use std::{convert::TryInto, iter::Peekable, vec::IntoIter};
 use TokenType::*;
 use anyhow::anyhow;
 
-use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::Expression, scanner::{Token, TokenType}, statement::Statement};
+use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::{Expression, LiteralValue}, scanner::{Token, TokenType}, statement::Statement};
 
 /// ParserError is the error type for the parser.
 pub struct Parser {
@@ -121,6 +126,75 @@ impl Parser {
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Print(expression))
+		} else if matches!(self.peek()?.r#type, TokenType::If) {
+			self.advance()?; // consume 'if'
+			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+			}
+			self.advance()?; // consume '('
+			let condition = self.expression()?;
+			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+			}
+			self.advance()?; // consume ')'
+			let then_branch = Box::new(self.parse_statement()?);
+			let else_branch = if matches!(self.peek()?.r#type, TokenType::Else) {
+				self.advance()?; // consume 'else'
+				Some(Box::new(self.parse_statement()?))
+			} else {
+				None
+			};
+			Ok(Statement::If { condition: *condition, then_branch, else_branch })
+		} else if matches!(self.peek()?.r#type, TokenType::While) {
+			self.advance()?; // consume 'while'
+			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+			}
+			self.advance()?; // consume '('
+			let condition = self.expression()?;
+			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+			}
+			self.advance()?; // consume ')'
+			let body = Box::new(self.parse_statement()?);
+			Ok(Statement::While { condition: *condition, body })
+		} else if matches!(self.peek()?.r#type, TokenType::For) {
+			self.advance()?; // consume 'for'
+			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+			}
+			self.advance()?; // consume '('
+			let initializer = if matches!(self.peek()?.r#type, TokenType::Semicolon) {
+				self.advance()?; // consume ';'
+				None
+			} else if matches!(self.peek()?.r#type, TokenType::Var) {
+				Some(self.var_declaration()?)
+			} else {
+				Some(self.parse_statement()?)
+			};
+			println!("initializer: {initializer:?}");
+			let condition =
+				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(*self.expression()?) } else { None };
+			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+			}
+			self.advance()?; // consume ';'
+			let increment =
+				if !matches!(self.peek()?.r#type, TokenType::RightParen) { Some(*self.expression()?) } else { None };
+			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+			}
+			self.advance()?; // consume ')'
+			let mut body = self.parse_statement()?;
+			if let Some(inc) = increment {
+				body = Statement::Block(vec![body, Statement::Expression(inc)]);
+			}
+			let condition = condition.unwrap_or(Expression::Literal(LiteralValue::Boolean(true)));
+			body = Statement::While { condition, body: Box::new(body) };
+			if let Some(init) = initializer {
+				body = Statement::Block(vec![init, body]);
+			}
+			Ok(body)
 		} else if matches!(self.peek()?.r#type, TokenType::LeftBrace) {
 			self.advance()?; // consume '{'
 			let mut statements = Vec::new();
@@ -172,6 +246,7 @@ impl Parser {
 		Ok(expr)
 	}
 
+	/// Parse assignment expressions.
 	fn assignment(&mut self) -> Result<Box<Expression>, ParserError> {
 		let expr = self.ternary()?;
 
@@ -190,7 +265,7 @@ impl Parser {
 
 	/// Parse ternary expressions.
 	fn ternary(&mut self) -> Result<Box<Expression>, ParserError> {
-		let condition = self.equality()?;
+		let condition = self.logic_or()?;
 
 		if matches!(self.peek()?.r#type, Question) {
 			self.advance()?;
@@ -205,6 +280,24 @@ impl Parser {
 			return Ok(Expression::ternary(condition, then_branch, else_branch));
 		}
 		Ok(condition)
+	}
+
+	/// Parse logical OR expressions.
+	fn logic_or(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.logic_and()?;
+		while matches!(self.peek()?.r#type, Or) {
+			expression = Expression::logical(expression, self.advance()?, self.logic_and()?)
+		}
+		Ok(expression)
+	}
+
+	/// Parse logical AND expressions.
+	fn logic_and(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.equality()?;
+		while matches!(self.peek()?.r#type, And) {
+			expression = Expression::logical(expression, self.advance()?, self.equality()?)
+		}
+		Ok(expression)
 	}
 
 	/// Parse equality expressions.

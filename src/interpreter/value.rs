@@ -24,7 +24,7 @@ impl Display for Value {
 					write!(f, "{n}")
 				}
 			}
-			Value::StringValue(s) => write!(f, "\"{s}\""),
+			Value::StringValue(s) => write!(f, "{s}"),
 		}
 	}
 }

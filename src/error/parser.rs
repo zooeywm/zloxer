@@ -32,6 +32,10 @@ pub enum ParseErrorType {
 	UnexpectedToken(String),
 	/// Error for missing semicolon at the end of a statement.
 	ExpectSemicolon,
+	/// Error for missing left parenthesis.
+	ExpectLeftParen,
+	/// Error for missing right parenthesis.
+	ExpectRightParen,
 	/// Error for missing right brace.
 	ExpectRightBrace,
 	/// Error for missing variable name in variable declaration.
@@ -50,6 +54,8 @@ impl std::fmt::Display for ParseErrorType {
 			ExpectVariableName => write!(f, "Expect variable name in declaration."),
 			InvalidAssignmentTarget => write!(f, "Invalid assignment target."),
 			ExpectRightBrace => write!(f, "Expect '}}' to close the block."),
+			ExpectLeftParen => write!(f, "Expect '(' after keyword."),
+			ExpectRightParen => write!(f, "Expect ')' after expression."),
 		}
 	}
 }

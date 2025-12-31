@@ -12,6 +12,7 @@ use crate::scanner::Token;
 #[derive(Debug)]
 pub(crate) enum Expression {
 	Literal(LiteralValue),
+	Logical { left: Box<Expression>, operator: Token, right: Box<Expression> },
 	Unary { operator: Token, right: Box<Expression> },
 	Variable(Token),
 	Binary { left: Box<Expression>, operator: Token, right: Box<Expression> },
@@ -22,12 +23,10 @@ pub(crate) enum Expression {
 }
 
 impl Expression {
-	// ---------- Unary ----------
 	pub fn unary(operator: Token, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Unary { operator, right })
 	}
 
-	// ---------- Binary ----------
 	pub fn binary(left: Box<Self>, operator: Token, right: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Binary { left, operator, right })
 	}
@@ -38,11 +37,14 @@ impl Expression {
 		Box::new(Expression::Ternary { condition, then_branch, else_branch })
 	}
 
-	// ---------- Grouping ----------
 	pub fn grouping(expr: Box<Self>) -> Box<Self> { Box::new(Expression::Grouping(expr)) }
 
 	pub fn assign(name: Token, value: Box<Self>) -> Box<Self> {
 		Box::new(Expression::Assign { target: name, value })
+	}
+
+	pub fn logical(left: Box<Self>, operator: Token, right: Box<Self>) -> Box<Self> {
+		Box::new(Expression::Logical { left, operator, right })
 	}
 }
 
@@ -87,6 +89,7 @@ impl std::fmt::Display for Expression {
 			}
 			Variable(token) => write!(f, "{}", token.lexeme),
 			Assign { target: name, value } => write!(f, "(= {} {value})", name.lexeme),
+			Logical { left, operator, right } => write!(f, "({} {left} {right})", operator.lexeme),
 		}
 	}
 }

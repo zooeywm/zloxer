@@ -7,11 +7,21 @@ use crate::{parser::expression::Expression, scanner::Token};
 /// A statement in the programming language.
 #[derive(Debug)]
 pub enum Statement {
-	Block(Vec<Statement>),
 	/// An expression used as a statement.
 	Expression(Expression),
+	If {
+		condition:   Expression,
+		then_branch: Box<Statement>,
+		else_branch: Option<Box<Statement>>,
+	},
+	While {
+		condition: Expression,
+		body:      Box<Statement>,
+	},
 	/// A print statement.
 	Print(Expression),
+	/// A block of statements.
+	Block(Vec<Statement>),
 	/// A variable declaration statement.
 	VarDeclaration {
 		/// The token of the variable being declared.
