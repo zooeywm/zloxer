@@ -52,6 +52,7 @@ print "i: "+i;
 while (i < 10) {
   print i;
   i = i + 1;
+  if (i > 4) break;
 }
 
 print "Fibonacci sequence up to 10,000:";
@@ -63,4 +64,5 @@ for (var b = 1; a < 10000; b = temp + b) {
   print a;
   temp = a;
   a = b;
+  if (a > 5000) break;
 }

@@ -29,6 +29,8 @@ pub enum Statement {
 		/// An optional initializer expression.
 		initializer: Option<Expression>,
 	},
+	/// A break statement to exit loops.
+	Break,
 }
 
 #[cfg(test)]

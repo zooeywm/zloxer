@@ -12,6 +12,9 @@ pub enum InterpreterError {
 	UndefinedVariable(String),
 	#[error("Invalid logical operation: {0}")]
 	LogicalOperationError(String),
+	/// Error for break statements
+	#[error("Break statement")]
+	Break,
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

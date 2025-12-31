@@ -81,8 +81,16 @@ impl Interpreter {
 			}
 			Statement::While { condition, body } => {
 				while self.evaluate(condition)?.to_bool() {
-					self.interpret_statement(body)?;
+					match self.interpret_statement(body) {
+						Ok(_) => {}
+						Err(InterpreterError::Break) => break,
+						Err(e) => return Err(e),
+					}
 				}
+			}
+			Statement::Break => {
+				// Return Break error to signal loop termination
+				return Err(InterpreterError::Break);
 			}
 		}
 		Ok(())

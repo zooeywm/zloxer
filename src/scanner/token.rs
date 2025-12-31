@@ -104,6 +104,8 @@ pub(crate) enum TokenType {
 	Var,
 	/// While loop keyword.
 	While,
+	/// Break statement keyword.
+	Break,
 	/// End of file/input.
 	Eof,
 }
@@ -145,6 +147,7 @@ impl TokenType {
 			"true" => TokenType::True,
 			"var" => TokenType::Var,
 			"while" => TokenType::While,
+			"break" => TokenType::Break,
 			_ => TokenType::Identifier(value),
 		}
 	}

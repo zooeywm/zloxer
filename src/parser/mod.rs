@@ -25,15 +25,16 @@
 //!
 //! ``` BNF
 //! program        -> statement* EOF ;
-//! statement      -> exprStmt | ifStmt | whileStmt | forStmt | printStmt | block | varDecl ;
+//! statement      -> exprStmt | if | while | for | print | block | varDecl | break ;
 //! exprStmt       -> expression ";" ;
-//! ifStmt         -> "if" "(" expression ")" statement ( "else" statement )? ;
-//! whileStmt      -> "while" "(" expression ")" statement ;
-//! forStmt        -> "for" "(" ( varDecl | exprStmt | ";" )
+//! if             -> "if" "(" expression ")" statement ( "else" statement )? ;
+//! while          -> "while" "(" expression ")" statement ;
+//! for            -> "for" "(" ( varDecl | exprStmt | ";" )
 //!                   expression? ";" expression? ")" statement;
-//! printStmt      -> "print" expression ";" ;
+//! print          -> "print" expression ";" ;
 //! block          -> "{" declaration* "}" ;
 //! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
+//! break          -> "break" ";" ;
 //! expression     -> comma ;
 //! comma          -> assignment ( "," assignment )* ;
 //! assignment     -> IDENTIFIER "=" assignment | ternary ;
@@ -126,6 +127,13 @@ impl Parser {
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Print(expression))
+		} else if matches!(self.peek()?.r#type, TokenType::Break) {
+			self.advance()?; // consume 'break'
+			if !matches!(self.peek()?.r#type, Semicolon) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+			}
+			self.advance()?; // consume ';'
+			Ok(Statement::Break)
 		} else if matches!(self.peek()?.r#type, TokenType::If) {
 			self.advance()?; // consume 'if'
 			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
