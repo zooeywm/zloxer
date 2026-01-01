@@ -1,68 +1,72 @@
-// First Lox program
-// There are no parentheses around the string because print is a built-in statement, and not a library function.
-// print "Hello, world!";
-// (){},.      -+;*!!====<<=>>=/
-// ()>>>="This is a
-// string"
-print 1 + 3 + 4;
+fun stressTest(name, limit) {
+  print "=== stressTest begin ===";
+  print "name: " + name;
+  print "limit: " + limit;
 
-// Variable declaration and assignment test
-var a = 5;
-print a;
-a = 10;
-print a;
+  // 外层局部状态
+  var counter = 0;
+  var sum = 0;
+  var last = nil;
 
-var c = "hello";
-print c;
-
-// Test boolean assignment
-var isTrue = true;
-print isTrue;
-isTrue = false;
-print isTrue;
-
-// Test nil assignment
-var n = nil;
-print n;
-n = 42;
-print n;
-
-var a = "global a";
-var b = "global b";
-var c = "global c";
-{
-  var a = "outer a";
-  var b = "outer b";
   {
-    var a = "inner a";
-    print a;
-    print b;
-    print c;
+    // 第一层作用域遮蔽
+    var counter = 100;
+    print "shadowed counter (outer block): " + counter;
+
+    {
+      // 第二层作用域遮蔽
+      var counter = 200;
+      print "shadowed counter (inner block): " + counter;
+    }
+
+    print "counter after inner block: " + counter;
   }
-  print a;
-  print b;
-  print c;
+
+  print "counter after blocks: " + counter;
+
+  // while + if + break
+  while (counter < limit) {
+    sum = sum + counter;
+
+    if (counter > limit / 2) {
+      print "halfway reached at: " + counter;
+    }
+
+    last = counter;
+    counter = counter + 1;
+
+    if (counter > limit + 2) {
+      break;
+    }
+  }
+
+  print "loop finished";
+  print "sum: " + sum;
+  print "last value: " + last;
+
+  // 嵌套 for + 内部变量
+  var outer = 0;
+  for (var i = 0; i < 3; i = i + 1) {
+    print "for i = " + i;
+
+    var inner = 0;
+    while (inner < 2) {
+      print "  inner = " + inner;
+      outer = outer + 1;
+      inner = inner + 1;
+    }
+  }
+
+  print "outer count: " + outer;
+
+  // if / else 链
+  if (sum > 50) {
+    print "sum is large";
+  } else {
+    print "sum is small";
+  }
+
+  print "=== stressTest end ===";
 }
-print a;
-print b;
-print c;
 
-var i = 0;
-print "i: "+i;
-while (i < 10) {
-  print i;
-  i = i + 1;
-  if (i > 4) break;
-}
-
-print "Fibonacci sequence up to 10,000:";
-
-var a = 0;
-var temp;
-
-for (var b = 1; a < 10000; b = temp + b) {
-  print a;
-  temp = a;
-  a = b;
-  if (a > 5000) break;
-}
+stressTest("TestRun", 8);

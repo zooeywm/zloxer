@@ -1,19 +1,18 @@
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
-use crate::{environment::Environment, interpreter::value::Value, statement::Statement};
+use crate::{interpreter::value::Value, scanner::Token, statement::Statement};
 
 type NativeFunction = Box<dyn Fn(&[Rc<RefCell<Value>>]) -> Value>;
 
 #[derive(Debug)]
 pub(crate) struct CallableValue {
-	pub arity:   usize,
-	pub body:    CallableType,
-	pub closure: Environment,
+	pub parameters: Rc<Vec<Token>>,
+	pub body:       CallableType,
 }
 
 pub(crate) enum CallableType {
 	Native(NativeFunction),
-	Lox(Vec<Statement>),
+	Lox(Rc<Vec<Statement>>),
 }
 
 impl Debug for CallableType {
@@ -26,21 +25,11 @@ impl Debug for CallableType {
 }
 
 impl CallableValue {
-	pub fn new_lox(arity: usize, body: Vec<Statement>, closure: Environment) -> Self {
-		Self { arity, body: CallableType::Lox(body), closure }
+	pub fn new_lox(parameters: Rc<Vec<Token>>, body: Rc<Vec<Statement>>) -> Self {
+		Self { parameters, body: CallableType::Lox(body) }
 	}
 
-	pub fn new_native(arity: usize, body: NativeFunction, closure: Environment) -> Self {
-		Self { arity, body: CallableType::Native(body), closure }
-	}
-
-	pub fn call(&self, args: &[Rc<RefCell<Value>>]) -> Rc<RefCell<Value>> {
-		Rc::new(RefCell::new(match &self.body {
-			CallableType::Native(func) => func(args),
-			CallableType::Lox(_statements) => {
-				// Lox function call handling would go here
-				unimplemented!("Lox function calls are not implemented yet.")
-			}
-		}))
+	pub fn new_native(parameters: Rc<Vec<Token>>, body: NativeFunction) -> Self {
+		Self { parameters, body: CallableType::Native(body) }
 	}
 }

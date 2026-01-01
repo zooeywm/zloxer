@@ -42,6 +42,8 @@ pub enum ParseErrorType {
 	ExpectVariableName,
 	/// Error for too many arguments in function call.
 	TooManyArguments,
+	/// Error for too many parameters in function declaration.
+	TooManyParameters,
 	/// Error for invalid assignment target.
 	InvalidAssignmentTarget,
 }
@@ -59,6 +61,7 @@ impl std::fmt::Display for ParseErrorType {
 			ExpectLeftParen => write!(f, "Expect '(' after keyword."),
 			ExpectRightParen => write!(f, "Expect ')' after expression."),
 			TooManyArguments => write!(f, "Cannot have more than 255 arguments."),
+			TooManyParameters => write!(f, "Cannot have more than 255 parameters."),
 		}
 	}
 }

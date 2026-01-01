@@ -24,8 +24,11 @@
 //! Lox Expression grammar:
 //!
 //! ``` BNF
-//! program        -> statement* EOF ;
-//! statement      -> exprStmt | if | while | for | print | block | varDecl | break ;
+//! program        -> declaration* EOF ;
+//! declaration    -> funDecl | varDecl | statement ;
+//! statement      -> exprStmt | if | while | for | print | block | break ;
+//! funDecl       -> "fun" function ;
+//! function       -> IDENTIFIER "(" parameters? ")" block ;
 //! exprStmt       -> expression ";" ;
 //! if             -> "if" "(" expression ")" statement ( "else" statement )? ;
 //! while          -> "while" "(" expression ")" statement ;
@@ -47,13 +50,13 @@
 //! factor         -> unary ( ( "/" | "*" ) unary )* ;
 //! unary          -> ( "!" | "-" ) unary | call ;
 //! call           -> primary ( "(" arguments? ")" )* ;
-//! arguments      -> expression ( "," expression )* ;
+//! arguments      -> assignment ( "," assignment )* ;
 //! primary        -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 //! ```
 
 pub(crate) mod expression;
 
-use std::{convert::TryInto, iter::Peekable, vec::IntoIter};
+use std::{convert::TryInto, iter::Peekable, rc::Rc, vec::IntoIter};
 
 use TokenType::*;
 use anyhow::anyhow;
@@ -71,7 +74,7 @@ pub struct Parser {
 impl Parser {
 	pub fn new(tokens: Vec<Token>) -> Self { Self { tokens: tokens.into_iter().peekable(), error_count: 0 } }
 
-	pub fn parse(mut self) -> Result<Vec<Statement>, LoxError> {
+	pub fn parse_statements(mut self) -> Result<Vec<Statement>, LoxError> {
 		let mut statements = Vec::new();
 		while let Ok(token) = self.peek() {
 			if matches!(token.r#type, TokenType::Eof) {
@@ -92,6 +95,48 @@ impl Parser {
 	fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
 		if matches!(self.peek()?.r#type, TokenType::Var) {
 			self.var_declaration()
+		} else if matches!(self.peek()?.r#type, TokenType::Fun) {
+			self.advance()?; // consume 'fun'
+			let name_token = self.advance()?;
+			self.advance()?; // consume '('
+			let mut parameters = Vec::new();
+			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+				loop {
+					if parameters.len() >= 255 {
+						return Err(ParseError::new(self.peek()?.line, ParseErrorType::TooManyParameters).into());
+					}
+					let param_token = self.advance()?;
+					if !matches!(param_token.r#type, TokenType::Identifier(_)) {
+						return Err(ParseError::new(param_token.line, ParseErrorType::ExpectVariableName).into());
+					}
+					parameters.push(param_token);
+					if !matches!(self.peek()?.r#type, TokenType::Comma) {
+						break;
+					}
+					self.advance()?; // consume ','
+				}
+			}
+			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+			}
+			self.advance()?; // consume ')'
+			if !matches!(self.peek()?.r#type, TokenType::LeftBrace) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+			}
+			self.advance()?; // consume '{'
+			let mut body_statements = Vec::new();
+			while !matches!(self.peek()?.r#type, TokenType::RightBrace | TokenType::Eof) {
+				body_statements.push(self.parse_declaration()?);
+			}
+			if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightBrace).into());
+			}
+			self.advance()?; // consume '}'
+			Ok(Statement::FunctionDeclaration {
+				name_token,
+				parameters: Rc::new(parameters),
+				body: Rc::new(body_statements),
+			})
 		} else {
 			self.parse_statement()
 		}
@@ -182,7 +227,6 @@ impl Parser {
 			} else {
 				Some(self.parse_statement()?)
 			};
-			println!("initializer: {initializer:?}");
 			let condition =
 				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(*self.expression()?) } else { None };
 			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
@@ -245,6 +289,7 @@ impl Parser {
 	/// Parse comma expressions.
 	fn expression(&mut self) -> Result<Box<Expression>, ParserError> { self.comma() }
 
+	#[allow(dead_code)]
 	/// Parse comma expressions.
 	fn comma(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expr = self.assignment()?;
@@ -365,7 +410,9 @@ impl Parser {
 					if arguments.len() >= 255 {
 						return Err(ParseError::new(self.peek()?.line, ParseErrorType::TooManyArguments).into());
 					}
-					arguments.push(*self.expression()?);
+					// Use assignment() instead of expression() to avoid parsing comma expressions
+					// in function arguments
+					arguments.push(*self.assignment()?);
 					if !matches!(self.peek()?.r#type, Comma) {
 						break;
 					}

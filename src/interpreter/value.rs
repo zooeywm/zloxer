@@ -1,8 +1,8 @@
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::fmt::Display;
 
 use Value::*;
 
-use crate::{error::interpreter::InterpreterError, interpreter::callable::CallableValue, scanner::Token};
+use crate::interpreter::callable::CallableValue;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
@@ -152,25 +152,4 @@ impl Value {
 
 	/// Tries to compare two values for inequality.
 	pub fn bang_equal(&self, other: &Self) -> Option<bool> { Some(!self.equal(other)?) }
-
-	pub fn call(
-		&self,
-		paren: &Token,
-		args: &[Rc<RefCell<Value>>],
-	) -> Result<Rc<RefCell<Value>>, InterpreterError> {
-		match self {
-			Callable(callable) => {
-				if args.len() != callable.arity {
-					return Err(InterpreterError::ArgumentError(format!(
-						"line {}: Expected {} arguments but got {}.",
-						paren.line,
-						callable.arity,
-						args.len()
-					)));
-				}
-				Ok(callable.call(args))
-			}
-			_ => Err(InterpreterError::NotCallable(format!("line {}: '{self}'", paren.line))),
-		}
-	}
 }

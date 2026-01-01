@@ -2,6 +2,8 @@
 //! are allowed. The operands of, say, `+` are always expressions, never
 //! statements. The body of a `while` loop is always a statement.
 
+use std::rc::Rc;
+
 use crate::{parser::expression::Expression, scanner::Token};
 
 /// A statement in the programming language.
@@ -9,6 +11,11 @@ use crate::{parser::expression::Expression, scanner::Token};
 pub enum Statement {
 	/// An expression used as a statement.
 	Expression(Expression),
+	FunctionDeclaration {
+		name_token: Token,
+		parameters: Rc<Vec<Token>>,
+		body:       Rc<Vec<Statement>>,
+	},
 	If {
 		condition:   Expression,
 		then_branch: Box<Statement>,
@@ -42,7 +49,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		parser.parse().unwrap().len()
+		parser.parse_statements().unwrap().len()
 	}
 
 	/// Helper function to parse a string and check if the first statement matches
@@ -53,7 +60,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 
 		match expected_type {
 			"print" => matches!(statements[0], Statement::Print(_)),
@@ -70,7 +77,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 
 		match &statements[0] {
 			Statement::VarDeclaration { name_token, initializer } => {
@@ -127,7 +134,7 @@ mod tests {
 		let scanner = Scanner::new("var x = 5; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 
 		use crate::statement::Statement;
 		assert!(matches!(statements[0], Statement::VarDeclaration { .. }));

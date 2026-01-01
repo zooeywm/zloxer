@@ -20,7 +20,7 @@ use std::{cell::RefCell, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
 
-use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::callable::CallableValue, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::TokenType::*, statement::Statement};
+use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::callable::{CallableType, CallableValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::{Token, TokenType::*}, statement::Statement};
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter {
@@ -30,20 +30,20 @@ pub struct Interpreter {
 impl Interpreter {
 	pub fn new() -> Self {
 		// Define the "clock" native function
-		let mut environment = Environment::new(None);
+		let mut environment = Environment::new();
 		let closure = Box::new(|_args: &[Rc<RefCell<Value>>]| {
 			println!("Native function 'clock' called.");
 			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-			Value::Number(now.as_secs_f64())
+			Value::Number(now.as_secs() as f64)
 		});
-		let callable_value = CallableValue::new_native(0, closure, Environment::new(None));
+		let callable_value = CallableValue::new_native(Rc::new(vec![]), closure);
 		environment.define_native("clock", Value::Callable(callable_value));
 		Self { environment: Box::new(environment) }
 	}
 
-	pub fn interpret_statements(&mut self, statements: Vec<Statement>) -> Result<(), InterpreterError> {
+	pub fn interpret_statements(&mut self, statements: &[Statement]) -> Result<(), InterpreterError> {
 		for statement in statements {
-			self.interpret_statement(&statement)?;
+			self.interpret_statement(statement)?;
 		}
 		Ok(())
 	}
@@ -67,24 +67,7 @@ impl Interpreter {
 				self.environment.define(name_token, value);
 			}
 			Statement::Block(statements) => {
-				// Take the current environment and create a new one with it as the outer
-				let current_env = std::mem::take(&mut self.environment);
-				*self.environment = Environment::new(Some(current_env));
-
-				// Execute statements in the new environment
-				let mut result = Ok(());
-				for stmt in statements {
-					result = self.interpret_statement(stmt);
-					if result.is_err() {
-						break;
-					}
-				}
-
-				// Restore the original environment by taking the inner environment
-				if let Some(outer) = self.environment.outer.take() {
-					self.environment = outer;
-				}
-				result?
+				self.interpret_block(statements, Environment::new())?;
 			}
 			Statement::If { condition, then_branch, else_branch } => {
 				let condition_value = self.evaluate(condition)?;
@@ -108,8 +91,31 @@ impl Interpreter {
 				// Return Break error to signal loop termination
 				return Err(InterpreterError::Break);
 			}
+			Statement::FunctionDeclaration { name_token, parameters, body } => {
+				let callable = CallableValue::new_lox(parameters.clone(), body.clone());
+				let value = Value::Callable(callable);
+				self.environment.define(name_token, Rc::new(RefCell::new(value)));
+			}
 		}
 		Ok(())
+	}
+
+	fn interpret_block(
+		&mut self,
+		statements: &[Statement],
+		new_environment: Environment,
+	) -> Result<(), InterpreterError> {
+		// Take the current environment and create a new one with it as the outer
+		let current_env = std::mem::take(&mut self.environment);
+		*self.environment = new_environment.set_outer(current_env);
+
+		let result = self.interpret_statements(statements);
+
+		// Restore the original environment by taking the inner environment
+		if let Some(outer) = self.environment.outer.take() {
+			self.environment = outer;
+		}
+		result
 	}
 
 	/// Interpret the given expression and print the result.
@@ -203,14 +209,46 @@ impl Interpreter {
 			}
 			Call { callee, paren, arguments } => {
 				let callee_value = self.evaluate(callee)?;
-				let callee_value = callee_value.borrow();
+				let callee_value = &*callee_value.borrow();
 				let mut arg_values = Vec::new();
 				for arg in arguments {
 					arg_values.push(self.evaluate(arg)?);
 				}
-				callee_value.call(paren, &arg_values)?
+				self.call(callee_value, paren, &arg_values)?
 			}
 		})
+	}
+
+	fn call(
+		&mut self,
+		value: &Value,
+		paren: &Token,
+		args: &[Rc<RefCell<Value>>],
+	) -> Result<Rc<RefCell<Value>>, InterpreterError> {
+		match value {
+			Value::Callable(CallableValue { parameters, body }) => {
+				if args.len() != parameters.len() {
+					return Err(InterpreterError::ArgumentError(format!(
+						"line {}: Expected {} arguments but got {}.",
+						paren.line,
+						parameters.len(),
+						args.len()
+					)));
+				}
+				Ok(Rc::new(RefCell::new(match body {
+					CallableType::Native(func) => func(args),
+					CallableType::Lox(statements) => {
+						let mut environment = Environment::new();
+						for (i, parameter) in parameters.iter().enumerate() {
+							environment.define(parameter, args[i].clone());
+						}
+						self.interpret_block(statements, environment)?;
+						Value::Nil
+					}
+				})))
+			}
+			_ => Err(InterpreterError::NotCallable(format!("line {}: '{value}'", paren.line))),
+		}
 	}
 }
 
@@ -223,7 +261,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		// Execute all statements
@@ -244,10 +282,10 @@ mod tests {
 		let scanner = Scanner::new("var x = 10; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 		let mut interpreter = Interpreter::new();
 
-		assert!(interpreter.interpret_statements(statements).is_ok());
+		assert!(interpreter.interpret_statements(&statements).is_ok());
 	}
 
 	#[test]
@@ -255,11 +293,11 @@ mod tests {
 		let scanner = Scanner::new("var x = 10; x = 20; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		// Test assignment and print
-		assert!(interpreter.interpret_statements(statements).is_ok());
+		assert!(interpreter.interpret_statements(&statements).is_ok());
 	}
 
 	#[test]
@@ -267,10 +305,10 @@ mod tests {
 		let scanner = Scanner::new("print undefined_var;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse().unwrap();
+		let statements = parser.parse_statements().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		// Test undefined variable should cause error
-		assert!(interpreter.interpret_statements(statements).is_err());
+		assert!(interpreter.interpret_statements(&statements).is_err());
 	}
 }

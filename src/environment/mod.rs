@@ -9,7 +9,12 @@ pub struct Environment {
 }
 
 impl Environment {
-	pub fn new(outer: Option<Box<Environment>>) -> Self { Self { variables: HashMap::new(), outer } }
+	pub fn new() -> Self { Self { variables: HashMap::new(), outer: None } }
+
+	pub fn set_outer(mut self, outer: Box<Environment>) -> Self {
+		self.outer = Some(outer);
+		self
+	}
 
 	/// A variable statement doesn’t just define a new variable, it can also be
 	/// used to redefine an existing variable.
