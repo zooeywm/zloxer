@@ -26,7 +26,7 @@
 //! ``` BNF
 //! program        -> declaration* EOF ;
 //! declaration    -> funDecl | varDecl | statement ;
-//! statement      -> exprStmt | if | while | for | print | block | break ;
+//! statement      -> exprStmt | if | while | for | print | return | block | break ;
 //! funDecl       -> "fun" function ;
 //! function       -> IDENTIFIER "(" parameters? ")" block ;
 //! exprStmt       -> expression ";" ;
@@ -35,6 +35,7 @@
 //! for            -> "for" "(" ( varDecl | exprStmt | ";" )
 //!                   expression? ";" expression? ")" statement;
 //! print          -> "print" expression ";" ;
+//! return         -> "return" expression? ";" ;
 //! block          -> "{" declaration* "}" ;
 //! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
 //! break          -> "break" ";" ;
@@ -174,6 +175,15 @@ impl Parser {
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Print(expression))
+		} else if matches!(self.peek()?.r#type, TokenType::Return) {
+			self.advance()?; // consume 'return'
+			let return_value =
+				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(self.expression()?) } else { None };
+			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
+				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+			}
+			self.advance()?; // consume ';'
+			Ok(Statement::Return(return_value))
 		} else if matches!(self.peek()?.r#type, TokenType::Break) {
 			self.advance()?; // consume 'break'
 			if !matches!(self.peek()?.r#type, Semicolon) {

@@ -1,3 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
+use crate::interpreter::value::Value;
+
 #[derive(thiserror::Error, Debug)]
 /// Errors that can occur during interpretation
 pub enum InterpreterError {
@@ -19,6 +23,9 @@ pub enum InterpreterError {
 	NotCallable(String),
 	#[error("Argument error: {0}")]
 	ArgumentError(String),
+	#[error("")]
+	#[allow(private_interfaces)]
+	Return(Rc<RefCell<Value>>),
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

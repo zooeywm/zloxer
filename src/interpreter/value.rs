@@ -7,7 +7,7 @@ use crate::interpreter::callable::CallableValue;
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 /// Value represents a runtime value in Lox.
-pub enum Value {
+pub(crate) enum Value {
 	Nil,
 	Boolean(bool),
 	Number(f64),
@@ -28,7 +28,18 @@ impl Display for Value {
 				}
 			}
 			StringValue(s) => write!(f, "{s}"),
-			Callable { .. } => write!(f, "<callable>"),
+			Callable(CallableValue { name, parameters, body: _ }) => {
+				write!(f, "<fn {name}(")?;
+				let mut first = true;
+				for param in parameters.iter() {
+					if !first {
+						write!(f, ", ")?;
+					}
+					first = false;
+					write!(f, "{}", param.lexeme)?;
+				}
+				write!(f, ")>")
+			}
 		}
 	}
 }

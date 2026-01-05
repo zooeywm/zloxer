@@ -27,6 +27,8 @@ pub enum Statement {
 	},
 	/// A print statement.
 	Print(Expression),
+	/// A return statememnt.
+	Return(Option<Box<Expression>>),
 	/// A block of statements.
 	Block(Vec<Statement>),
 	/// A variable declaration statement.

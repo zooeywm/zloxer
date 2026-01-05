@@ -6,6 +6,7 @@ type NativeFunction = Box<dyn Fn(&[Rc<RefCell<Value>>]) -> Value>;
 
 #[derive(Debug)]
 pub(crate) struct CallableValue {
+	pub name:       &'static str,
 	pub parameters: Rc<Vec<Token>>,
 	pub body:       CallableType,
 }
@@ -25,11 +26,11 @@ impl Debug for CallableType {
 }
 
 impl CallableValue {
-	pub fn new_lox(parameters: Rc<Vec<Token>>, body: Rc<Vec<Statement>>) -> Self {
-		Self { parameters, body: CallableType::Lox(body) }
+	pub fn new_lox(name: &'static str, parameters: Rc<Vec<Token>>, body: Rc<Vec<Statement>>) -> Self {
+		Self { name, parameters, body: CallableType::Lox(body) }
 	}
 
-	pub fn new_native(parameters: Rc<Vec<Token>>, body: NativeFunction) -> Self {
-		Self { parameters, body: CallableType::Native(body) }
+	pub fn new_native(name: &'static str, parameters: Rc<Vec<Token>>, body: NativeFunction) -> Self {
+		Self { name, parameters, body: CallableType::Native(body) }
 	}
 }

@@ -34,9 +34,9 @@ impl Interpreter {
 		let closure = Box::new(|_args: &[Rc<RefCell<Value>>]| {
 			println!("Native function 'clock' called.");
 			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-			Value::Number(now.as_secs() as f64)
+			Value::Number(now.as_secs_f64())
 		});
-		let callable_value = CallableValue::new_native(Rc::new(vec![]), closure);
+		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure);
 		environment.define_native("clock", Value::Callable(callable_value));
 		Self { environment: Box::new(environment) }
 	}
@@ -92,9 +92,17 @@ impl Interpreter {
 				return Err(InterpreterError::Break);
 			}
 			Statement::FunctionDeclaration { name_token, parameters, body } => {
-				let callable = CallableValue::new_lox(parameters.clone(), body.clone());
+				let callable = CallableValue::new_lox(name_token.lexeme, parameters.clone(), body.clone());
 				let value = Value::Callable(callable);
 				self.environment.define(name_token, Rc::new(RefCell::new(value)));
+			}
+			Statement::Return(expression) => {
+				let value = if let Some(expression) = expression {
+					self.evaluate(expression)?
+				} else {
+					Rc::new(RefCell::new(Value::Nil))
+				};
+				return Err(InterpreterError::Return(value));
 			}
 		}
 		Ok(())
@@ -226,26 +234,29 @@ impl Interpreter {
 		args: &[Rc<RefCell<Value>>],
 	) -> Result<Rc<RefCell<Value>>, InterpreterError> {
 		match value {
-			Value::Callable(CallableValue { parameters, body }) => {
+			Value::Callable(CallableValue { name, parameters, body }) => {
 				if args.len() != parameters.len() {
 					return Err(InterpreterError::ArgumentError(format!(
-						"line {}: Expected {} arguments but got {}.",
+						"line {}: Function {name} Expected {} arguments but got {}.",
 						paren.line,
 						parameters.len(),
 						args.len()
 					)));
 				}
-				Ok(Rc::new(RefCell::new(match body {
-					CallableType::Native(func) => func(args),
+				Ok(match body {
+					CallableType::Native(func) => Rc::new(RefCell::new(func(args))),
 					CallableType::Lox(statements) => {
 						let mut environment = Environment::new();
 						for (i, parameter) in parameters.iter().enumerate() {
 							environment.define(parameter, args[i].clone());
 						}
-						self.interpret_block(statements, environment)?;
-						Value::Nil
+						match self.interpret_block(statements, environment) {
+							Ok(_) => Rc::new(RefCell::new(Value::Nil)),
+							Err(InterpreterError::Return(value)) => value,
+							Err(e) => return Err(e),
+						}
 					}
-				})))
+				})
 			}
 			_ => Err(InterpreterError::NotCallable(format!("line {}: '{value}'", paren.line))),
 		}
