@@ -15,12 +15,12 @@
 pub(crate) mod callable;
 pub(crate) mod value;
 
-use std::{cell::RefCell, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
+use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
 
-use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::callable::{CallableType, CallableValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::{Token, TokenType::*}, statement::Statement};
+use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::callable::{CallableType, CallableValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::{Token, TokenType::*}, statement::Statement, utils::RcCell};
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter {
@@ -31,7 +31,7 @@ impl Interpreter {
 	pub fn new() -> Self {
 		// Define the "clock" native function
 		let mut environment = Environment::new();
-		let closure = Box::new(|_args: &[Rc<RefCell<Value>>]| {
+		let closure = Box::new(|_args: &[RcCell<Value>]| {
 			println!("Native function 'clock' called.");
 			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
 			Value::Number(now.as_secs_f64())
@@ -62,7 +62,7 @@ impl Interpreter {
 				let value = if let Some(initializer_expr) = initializer {
 					self.evaluate(initializer_expr)?
 				} else {
-					Rc::new(RefCell::new(Value::Nil))
+					RcCell::new(Value::Nil)
 				};
 				self.environment.define(name_token, value);
 			}
@@ -94,13 +94,13 @@ impl Interpreter {
 			Statement::FunctionDeclaration { name_token, parameters, body } => {
 				let callable = CallableValue::new_lox(name_token.lexeme, parameters.clone(), body.clone());
 				let value = Value::Callable(callable);
-				self.environment.define(name_token, Rc::new(RefCell::new(value)));
+				self.environment.define(name_token, RcCell::new(value));
 			}
 			Statement::Return(expression) => {
 				let value = if let Some(expression) = expression {
 					self.evaluate(expression)?
 				} else {
-					Rc::new(RefCell::new(Value::Nil))
+					RcCell::new(Value::Nil)
 				};
 				return Err(InterpreterError::Return(value));
 			}
@@ -135,18 +135,18 @@ impl Interpreter {
 	}
 
 	/// Evaluate the given expression and return its value.
-	fn evaluate(&mut self, expr: &Expression) -> Result<Rc<RefCell<Value>>, InterpreterError> {
+	fn evaluate(&mut self, expr: &Expression) -> Result<RcCell<Value>, InterpreterError> {
 		Ok(match expr {
-			Literal(lit) => Rc::new(RefCell::new(match lit {
+			Literal(lit) => RcCell::new(match lit {
 				LiteralValue::Nil => Value::Nil,
 				Boolean(b) => Value::Boolean(*b),
 				LiteralValue::Number(n) => Value::Number(*n),
 				StringLiteral(s) => Value::StringValue(s.to_string()),
-			})),
+			}),
 			Unary { operator, right } => {
 				let right_value = self.evaluate(right)?;
 				let right_value = right_value.borrow();
-				Rc::new(RefCell::new(match (&operator.r#type, &*right_value) {
+				RcCell::new(match (&operator.r#type, &*right_value) {
 					(Minus, Value::Number(n)) => Value::Number(-n),
 					(Bang, v) => Value::Boolean(!v.to_bool()),
 					_ => {
@@ -155,19 +155,19 @@ impl Interpreter {
 							operator.line
 						)));
 					}
-				}))
+				})
 			}
 			Binary { left, operator, right } => {
 				let left_value = self.evaluate(left)?;
 				let left_value = left_value.borrow();
 				let right_value = self.evaluate(right)?;
 				let right_value = right_value.borrow();
-				Rc::new(RefCell::new(left_value.binary_op(&operator.r#type, &right_value).ok_or(
+				RcCell::new(left_value.binary_op(&operator.r#type, &right_value).ok_or(
 					InterpreterError::BinaryOperationError(format!(
 						"line {}: {left_value} {} {right_value}",
 						operator.line, operator.lexeme
 					)),
-				)?))
+				)?)
 			}
 			Grouping(inner) => self.evaluate(inner)?,
 			CommaExpression { left, right } => {
@@ -231,8 +231,8 @@ impl Interpreter {
 		&mut self,
 		value: &Value,
 		paren: &Token,
-		args: &[Rc<RefCell<Value>>],
-	) -> Result<Rc<RefCell<Value>>, InterpreterError> {
+		args: &[RcCell<Value>],
+	) -> Result<RcCell<Value>, InterpreterError> {
 		match value {
 			Value::Callable(CallableValue { name, parameters, body }) => {
 				if args.len() != parameters.len() {
@@ -244,14 +244,14 @@ impl Interpreter {
 					)));
 				}
 				Ok(match body {
-					CallableType::Native(func) => Rc::new(RefCell::new(func(args))),
+					CallableType::Native(func) => RcCell::new(func(args)),
 					CallableType::Lox(statements) => {
 						let mut environment = Environment::new();
 						for (i, parameter) in parameters.iter().enumerate() {
 							environment.define(parameter, args[i].clone());
 						}
 						match self.interpret_block(statements, environment) {
-							Ok(_) => Rc::new(RefCell::new(Value::Nil)),
+							Ok(_) => RcCell::new(Value::Nil),
 							Err(InterpreterError::Return(value)) => value,
 							Err(e) => return Err(e),
 						}

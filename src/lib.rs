@@ -117,5 +117,7 @@ mod parser;
 mod scanner;
 mod statement;
 
+mod utils;
+
 pub use error::{LoxError, scanner::{ScanError, ScanErrorType, ScannerError}};
 pub use loxer::Loxer;

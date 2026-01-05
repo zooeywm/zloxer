@@ -94,6 +94,7 @@ impl Parser {
 	}
 
 	fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
+		let line = self.peek()?.line; // consume 'fun'
 		if matches!(self.peek()?.r#type, TokenType::Var) {
 			self.var_declaration()
 		} else if matches!(self.peek()?.r#type, TokenType::Fun) {
@@ -104,11 +105,11 @@ impl Parser {
 			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
 				loop {
 					if parameters.len() >= 255 {
-						return Err(ParseError::new(self.peek()?.line, ParseErrorType::TooManyParameters).into());
+						return Err(ParseError::new(line, ParseErrorType::TooManyParameters).into());
 					}
 					let param_token = self.advance()?;
 					if !matches!(param_token.r#type, TokenType::Identifier(_)) {
-						return Err(ParseError::new(param_token.line, ParseErrorType::ExpectVariableName).into());
+						return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
 					}
 					parameters.push(param_token);
 					if !matches!(self.peek()?.r#type, TokenType::Comma) {
@@ -118,11 +119,11 @@ impl Parser {
 				}
 			}
 			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
 			}
 			self.advance()?; // consume ')'
 			if !matches!(self.peek()?.r#type, TokenType::LeftBrace) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
 			}
 			self.advance()?; // consume '{'
 			let mut body_statements = Vec::new();
@@ -130,7 +131,7 @@ impl Parser {
 				body_statements.push(self.parse_declaration()?);
 			}
 			if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightBrace).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectRightBrace).into());
 			}
 			self.advance()?; // consume '}'
 			Ok(Statement::FunctionDeclaration {
@@ -144,11 +145,11 @@ impl Parser {
 	}
 
 	fn var_declaration(&mut self) -> Result<Statement, ParserError> {
-		self.advance()?; // consume 'var'
+		let line = self.advance()?.line; // consume 'var'
 		let name_token = self.advance()?;
 
 		if !matches!(name_token.r#type, TokenType::Identifier(_)) {
-			return Err(ParseError::new(name_token.line, ParseErrorType::ExpectVariableName).into());
+			return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
 		}
 
 		let initializer = if matches!(self.peek()?.r#type, TokenType::Equal) {
@@ -159,7 +160,7 @@ impl Parser {
 		};
 
 		if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
-			return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+			return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
 		}
 		self.advance()?; // consume ';'
 
@@ -167,11 +168,12 @@ impl Parser {
 	}
 
 	fn parse_statement(&mut self) -> Result<Statement, ParserError> {
+		let line = self.peek()?.line;
 		if matches!(self.peek()?.r#type, TokenType::Print) {
 			self.advance()?; // consume 'print'
 			let expression = *self.expression()?;
 			if !matches!(self.peek()?.r#type, Semicolon) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Print(expression))
@@ -180,26 +182,26 @@ impl Parser {
 			let return_value =
 				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(self.expression()?) } else { None };
 			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Return(return_value))
 		} else if matches!(self.peek()?.r#type, TokenType::Break) {
 			self.advance()?; // consume 'break'
 			if !matches!(self.peek()?.r#type, Semicolon) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Break)
 		} else if matches!(self.peek()?.r#type, TokenType::If) {
 			self.advance()?; // consume 'if'
 			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
 			}
 			self.advance()?; // consume '('
 			let condition = self.expression()?;
 			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
 			}
 			self.advance()?; // consume ')'
 			let then_branch = Box::new(self.parse_statement()?);
@@ -213,12 +215,12 @@ impl Parser {
 		} else if matches!(self.peek()?.r#type, TokenType::While) {
 			self.advance()?; // consume 'while'
 			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
 			}
 			self.advance()?; // consume '('
 			let condition = self.expression()?;
 			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
 			}
 			self.advance()?; // consume ')'
 			let body = Box::new(self.parse_statement()?);
@@ -226,7 +228,7 @@ impl Parser {
 		} else if matches!(self.peek()?.r#type, TokenType::For) {
 			self.advance()?; // consume 'for'
 			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectLeftParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
 			}
 			self.advance()?; // consume '('
 			let initializer = if matches!(self.peek()?.r#type, TokenType::Semicolon) {
@@ -240,13 +242,13 @@ impl Parser {
 			let condition =
 				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(*self.expression()?) } else { None };
 			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
 			}
 			self.advance()?; // consume ';'
 			let increment =
 				if !matches!(self.peek()?.r#type, TokenType::RightParen) { Some(*self.expression()?) } else { None };
 			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightParen).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
 			}
 			self.advance()?; // consume ')'
 			let mut body = self.parse_statement()?;
@@ -267,14 +269,14 @@ impl Parser {
 			}
 			// 检查是否真的找到了 RightBrace
 			if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectRightBrace).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectRightBrace).into());
 			}
 			self.advance()?; // consume '}'
 			Ok(Statement::Block(statements))
 		} else {
 			let expression = *self.expression()?;
 			if !matches!(self.peek()?.r#type, Semicolon) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::ExpectSemicolon).into());
+				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
 			}
 			self.advance()?; // consume ';'
 			Ok(Statement::Expression(expression))
@@ -461,10 +463,7 @@ impl Parser {
 			}
 			_ => {
 				let err_string = token.lexeme.to_string();
-				let error = ParseError::new(token.line, ParseErrorType::UnexpectedToken(err_string));
-				self.synchronize(&error)?;
-				self.advance()?; // consume unexpected token
-				Err(error.into())
+				Err(ParseError::new(token.line, ParseErrorType::UnexpectedToken(err_string)).into())
 			}
 		}
 	}
@@ -481,7 +480,6 @@ impl Parser {
 	fn synchronize(&mut self, error: &ParseError) -> anyhow::Result<()> {
 		self.error_count += 1;
 		eprintln!("{error}");
-		self.advance()?;
 		while let Ok(token) = self.peek() {
 			if matches!(token.r#type, Class | Fun | Var | For | If | While | Print | Return) {
 				return Ok(());

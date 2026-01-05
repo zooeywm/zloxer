@@ -1,8 +1,8 @@
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{fmt::Debug, rc::Rc};
 
-use crate::{interpreter::value::Value, scanner::Token, statement::Statement};
+use crate::{interpreter::value::Value, scanner::Token, statement::Statement, utils::RcCell};
 
-type NativeFunction = Box<dyn Fn(&[Rc<RefCell<Value>>]) -> Value>;
+type NativeFunction = Box<dyn Fn(&[RcCell<Value>]) -> Value>;
 
 #[derive(Debug)]
 pub(crate) struct CallableValue {
