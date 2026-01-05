@@ -36,7 +36,7 @@ impl Interpreter {
 			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
 			Value::Number(now.as_secs_f64())
 		});
-		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure);
+		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure, RcCell::default());
 		environment.define_native("clock", Value::Callable(callable_value));
 		Self { environment: Box::new(environment) }
 	}
@@ -92,7 +92,13 @@ impl Interpreter {
 				return Err(InterpreterError::Break);
 			}
 			Statement::FunctionDeclaration { name_token, parameters, body } => {
-				let callable = CallableValue::new_lox(name_token.lexeme, parameters.clone(), body.clone());
+				// Create a closure by capturing the current environment
+				let callable = CallableValue::new_lox(
+					name_token.lexeme,
+					parameters.clone(),
+					body.clone(),
+					RcCell::new((*self.environment).clone()),
+				);
 				let value = Value::Callable(callable);
 				self.environment.define(name_token, RcCell::new(value));
 			}
@@ -234,7 +240,7 @@ impl Interpreter {
 		args: &[RcCell<Value>],
 	) -> Result<RcCell<Value>, InterpreterError> {
 		match value {
-			Value::Callable(CallableValue { name, parameters, body }) => {
+			Value::Callable(CallableValue { name, parameters, body, closure }) => {
 				if args.len() != parameters.len() {
 					return Err(InterpreterError::ArgumentError(format!(
 						"line {}: Function {name} Expected {} arguments but got {}.",
@@ -246,7 +252,9 @@ impl Interpreter {
 				Ok(match body {
 					CallableType::Native(func) => RcCell::new(func(args)),
 					CallableType::Lox(statements) => {
-						let mut environment = Environment::new();
+						// println!("closure: {closure:?}");
+						let mut environment = Environment::new().set_closure(closure.clone());
+						// Define function parameters in the new environment
 						for (i, parameter) in parameters.iter().enumerate() {
 							environment.define(parameter, args[i].clone());
 						}

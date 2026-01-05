@@ -2,17 +2,24 @@ use std::collections::HashMap;
 
 use crate::{error::interpreter::InterpreterError, interpreter::value::Value, scanner::Token, utils::RcCell};
 
-#[derive(Default, Debug)]
+/// Clone the RcCell, it's shallow copy
+#[derive(Default, Debug, Clone)]
 pub struct Environment {
 	variables: HashMap<&'static str, RcCell<Value>>,
 	pub outer: Option<Box<Environment>>,
+	closure:   Option<RcCell<Environment>>,
 }
 
 impl Environment {
-	pub fn new() -> Self { Self { variables: HashMap::new(), outer: None } }
+	pub fn new() -> Self { Self { variables: HashMap::new(), outer: None, closure: None } }
 
 	pub fn set_outer(mut self, outer: Box<Environment>) -> Self {
 		self.outer = Some(outer);
+		self
+	}
+
+	pub fn set_closure(mut self, closure: RcCell<Environment>) -> Self {
+		self.closure = Some(closure);
 		self
 	}
 
@@ -27,7 +34,12 @@ impl Environment {
 	}
 
 	pub fn get(&self, token: &Token) -> Option<RcCell<Value>> {
-		self.variables.get(token.lexeme).cloned().or_else(|| self.outer.as_ref().and_then(|env| env.get(token)))
+		self
+			.variables
+			.get(token.lexeme)
+			.cloned()
+			.or_else(|| self.closure.as_ref().and_then(|env| env.borrow().get(token)))
+			.or_else(|| self.outer.as_ref().and_then(|env| env.get(token)))
 	}
 
 	/// Assign a value to an existing variable.
@@ -35,6 +47,8 @@ impl Environment {
 		if let Some(v) = self.variables.get_mut(token.lexeme) {
 			*v = value;
 			Ok(())
+		} else if let Some(closure) = self.closure.as_mut() {
+			closure.borrow_mut().assign(token, value)
 		} else if let Some(outer) = self.outer.as_mut() {
 			outer.assign(token, value)
 		} else {

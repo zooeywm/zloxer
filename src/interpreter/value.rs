@@ -28,7 +28,7 @@ impl Display for Value {
 				}
 			}
 			StringValue(s) => write!(f, "{s}"),
-			Callable(CallableValue { name, parameters, body: _ }) => {
+			Callable(CallableValue { name, parameters, body: _, closure: _ }) => {
 				write!(f, "<fn {name}(")?;
 				let mut first = true;
 				for param in parameters.iter() {

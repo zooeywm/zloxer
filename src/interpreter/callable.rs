@@ -1,6 +1,6 @@
 use std::{fmt::Debug, rc::Rc};
 
-use crate::{interpreter::value::Value, scanner::Token, statement::Statement, utils::RcCell};
+use crate::{environment::Environment, interpreter::value::Value, scanner::Token, statement::Statement, utils::RcCell};
 
 type NativeFunction = Box<dyn Fn(&[RcCell<Value>]) -> Value>;
 
@@ -9,6 +9,7 @@ pub(crate) struct CallableValue {
 	pub name:       &'static str,
 	pub parameters: Rc<Vec<Token>>,
 	pub body:       CallableType,
+	pub closure:    RcCell<Environment>,
 }
 
 pub(crate) enum CallableType {
@@ -26,11 +27,21 @@ impl Debug for CallableType {
 }
 
 impl CallableValue {
-	pub fn new_lox(name: &'static str, parameters: Rc<Vec<Token>>, body: Rc<Vec<Statement>>) -> Self {
-		Self { name, parameters, body: CallableType::Lox(body) }
+	pub fn new_lox(
+		name: &'static str,
+		parameters: Rc<Vec<Token>>,
+		body: Rc<Vec<Statement>>,
+		closure: RcCell<Environment>,
+	) -> Self {
+		Self { name, parameters, body: CallableType::Lox(body), closure }
 	}
 
-	pub fn new_native(name: &'static str, parameters: Rc<Vec<Token>>, body: NativeFunction) -> Self {
-		Self { name, parameters, body: CallableType::Native(body) }
+	pub fn new_native(
+		name: &'static str,
+		parameters: Rc<Vec<Token>>,
+		body: NativeFunction,
+		closure: RcCell<Environment>,
+	) -> Self {
+		Self { name, parameters, body: CallableType::Native(body), closure }
 	}
 }

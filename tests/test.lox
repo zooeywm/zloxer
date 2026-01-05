@@ -98,3 +98,58 @@ fun makeCounter() {
 var counter = makeCounter();
 counter(); // "1".
 counter(); // "2".
+
+// Advanced closure example with parameters
+fun makeAdder(x) {
+  fun adder(y) {
+    return x + y;
+  }
+  return adder;
+}
+
+// Create a function that adds 5 to its argument
+var add5 = makeAdder(5);
+print add5(2); // prints "7"
+
+// Create a function that adds 10 to its argument
+var add10 = makeAdder(10);
+print add10(2); // prints "12"
+
+// Demonstrate that each closure maintains its own captured variable
+var x = 1;
+fun foo() {
+  var x = 2;
+  fun bar() {
+    print x; // prints the local x (2), not the global one (1)
+  }
+  return bar;
+}
+
+var closure = foo();
+closure(); // prints "2"
+print x;    // prints "1"
+
+// Example of closure with multiple captured variables
+fun createMultiplierAndAdder(multiplier, addend) {
+  fun mulAdder(value) {
+    return value * multiplier + addend;
+  }
+
+  return mulAdder;
+}
+
+var multiplyBy2Add3 = createMultiplierAndAdder(2, 3);
+var multiplyBy10Minus5 = createMultiplierAndAdder(10, -5);
+
+print multiplyBy2Add3(5);   // prints "13" (5*2+3)
+print multiplyBy10Minus5(3); // prints "25" (3*10-5)
+
+fun scope(a) {
+  print "before shadow: " + a;
+  // Shadow a value
+  var a = "local";
+  print "after shadow: " + a;
+  print a;
+}
+
+scope("abc");
