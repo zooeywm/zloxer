@@ -46,8 +46,8 @@ impl Loxer {
 					self.run_statements(input)
 				} else {
 					match input.chars().rev().find(|c| !c.is_whitespace()) {
-						Some(';') => self.run_statements(input),
-						Some(_) => self.run_expression(input),
+						Some(_) => self.run_statements(input),
+						// Some(_) => self.run_expression(input),
 						None => Ok(()),
 					}
 				}
@@ -72,6 +72,7 @@ impl Loxer {
 		Ok(())
 	}
 
+	#[allow(unused)]
 	fn run_expression(&mut self, source: String) -> Result<(), LoxError> {
 		let leaked: &'static str = source.leak();
 		let scanner = Scanner::new(leaked);

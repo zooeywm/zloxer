@@ -9,10 +9,10 @@ pub enum LoxError {
 	#[error("CompilerInternalError: {0}")]
 	InternalError(#[from] anyhow::Error),
 	/// Scanner errors encountered during scanning
-	#[error("Genetraed {0} scanner errors")]
+	#[error("Generated {0} scanner errors")]
 	ScannerErrors(usize),
 	/// Parser errors encountered during parsing
-	#[error("Genetraed {0} parser errors")]
+	#[error("Generated {0} parser errors")]
 	ParserErrors(usize),
 	/// Runtime errors encountered during interpretation
 	#[error("Runtime error:\n{0}")]

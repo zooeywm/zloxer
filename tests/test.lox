@@ -8,8 +8,7 @@ fun stressTest(name, limit) {
   var last = nil;
 
   {
-    var counter = 100;
-    print "shadowed counter (outer block): " + counter;
+    var counter = 100; print "shadowed counter (outer block): " + counter;
 
     {
       var counter = 200;

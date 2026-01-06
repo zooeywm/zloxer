@@ -27,8 +27,9 @@
 //! program        -> declaration* EOF ;
 //! declaration    -> funDecl | varDecl | statement ;
 //! statement      -> exprStmt | if | while | for | print | return | block | break ;
-//! funDecl       -> "fun" function ;
+//! funDecl        -> "fun" function ;
 //! function       -> IDENTIFIER "(" parameters? ")" block ;
+//! parameters     -> IDENTIFIER ( "," IDENTIFIER )* ;
 //! exprStmt       -> expression ";" ;
 //! if             -> "if" "(" expression ")" statement ( "else" statement )? ;
 //! while          -> "while" "(" expression ")" statement ;
@@ -283,6 +284,7 @@ impl Parser {
 		}
 	}
 
+	#[allow(unused)]
 	/// Parse the tokens into an expression.
 	pub fn parse_expression(mut self) -> Result<Expression, LoxError> {
 		match self.expression() {
