@@ -22,7 +22,7 @@ use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
 
-use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::{callable::{CallableType, CallableValue}, class::ClassValue, instance::InstanceValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::{Token, TokenType::*}, statement::{Function, Statement}, utils::RcCell};
+use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::{callable::{CallableType, CallableValue}, class::ClassValue, instance::InstanceValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::TokenType::*, statement::{Function, Statement}, utils::RcCell};
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter {
@@ -93,7 +93,7 @@ impl Interpreter {
 				// Return Break error to signal loop termination
 				return Err(InterpreterError::Break);
 			}
-			Statement::Function(Function { name_token, parameters, body }) => {
+			Statement::FunDecl(Function { name_token, parameters, body }) => {
 				// Create a closure by capturing the current environment
 				let callable = CallableValue::new_lox(
 					name_token.lexeme,
@@ -112,7 +112,7 @@ impl Interpreter {
 				};
 				return Err(InterpreterError::Return(value));
 			}
-			Statement::Class { name_token, methods } => {
+			Statement::ClassDecl { name_token, methods } => {
 				let class = RcCell::new(ClassValue::new(name_token.lexeme));
 				self.environment.define(name_token, RcCell::new(Value::Class(class)));
 			}
@@ -227,22 +227,30 @@ impl Interpreter {
 					}
 				}
 			}
-			Call { callee, paren, arguments } => {
+			Call { callee, line, arguments } => {
 				let callee_value = self.evaluate(callee)?;
 				let callee_value = &*callee_value.borrow();
 				let mut arg_values = Vec::new();
 				for arg in arguments {
 					arg_values.push(self.evaluate(arg)?);
 				}
-				self.call(callee_value, paren, &arg_values)?
+				self.call(callee_value, *line, &arg_values)?
 			}
+			Get { instance, property } => {
+				let instance = self.evaluate(instance)?;
+				if let Value::Instance(instance) = &*instance.borrow() {
+					return instance.get(property);
+				}
+				return Err(InterpreterError::GetPropertyError);
+			}
+			Set { instance, property, value } => todo!(),
 		})
 	}
 
 	fn call(
 		&mut self,
 		value: &Value,
-		paren: &Token,
+		line: usize,
 		args: &[RcCell<Value>],
 	) -> Result<RcCell<Value>, InterpreterError> {
 		match value {
@@ -250,7 +258,7 @@ impl Interpreter {
 				if args.len() != parameters.len() {
 					return Err(InterpreterError::ArgumentError(format!(
 						"line {}: Function {name} Expected {} arguments but got {}.",
-						paren.line,
+						line,
 						parameters.len(),
 						args.len()
 					)));
@@ -276,7 +284,7 @@ impl Interpreter {
 				let instance = InstanceValue::new(class.clone());
 				Ok(RcCell::new(Value::Instance(instance)))
 			}
-			_ => Err(InterpreterError::NotCallable(format!("line {}: '{value}'", paren.line))),
+			_ => Err(InterpreterError::NotCallable(format!("line {}: '{value}'", line))),
 		}
 	}
 }
@@ -290,7 +298,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		// Execute all statements
@@ -311,7 +319,7 @@ mod tests {
 		let scanner = Scanner::new("var x = 10; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		assert!(interpreter.interpret_statements(&statements).is_ok());
@@ -322,7 +330,7 @@ mod tests {
 		let scanner = Scanner::new("var x = 10; x = 20; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		// Test assignment and print
@@ -334,7 +342,7 @@ mod tests {
 		let scanner = Scanner::new("print undefined_var;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 		let mut interpreter = Interpreter::new();
 
 		// Test undefined variable should cause error

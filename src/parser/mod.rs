@@ -24,37 +24,41 @@
 //! Lox Expression grammar:
 //!
 //! ``` BNF
-//! program        -> declaration* EOF ;
-//! declaration    -> classDecl | funDecl | varDecl | statement ;
-//! classDecl      -> "class" IDENTIFIER "{" function* "}" ;
-//! statement      -> exprStmt | if | while | for | print | return | block | break ;
-//! funDecl        -> "fun" function ;
-//! function       -> IDENTIFIER "(" parameters? ")" block ;
-//! parameters     -> IDENTIFIER ( "," IDENTIFIER )* ;
-//! exprStmt       -> expression ";" ;
-//! if             -> "if" "(" expression ")" statement ( "else" statement )? ;
-//! while          -> "while" "(" expression ")" statement ;
-//! for            -> "for" "(" ( varDecl | exprStmt | ";" )
-//!                   expression? ";" expression? ")" statement;
-//! print          -> "print" expression ";" ;
-//! return         -> "return" expression? ";" ;
-//! block          -> "{" declaration* "}" ;
-//! varDecl        -> "var" IDENTIFIER ( "=" expression )? ";" ;
-//! break          -> "break" ";" ;
-//! expression     -> comma ;
-//! comma          -> assignment ( "," assignment )* ;
-//! assignment     -> IDENTIFIER "=" assignment | ternary ;
-//! ternary        -> logicOr ( "?" expression ":" ternary )? ;
-//! logicOr        -> logicAnd ( "or" logicAnd )* ;
-//! logicAnd       -> equality ( "and" equality )* ;
-//! equality       -> comparison ( ( "!=" | "==" ) comparison )* ;
-//! comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-//! term           -> factor ( ( "-" | "+" ) factor )* ;
-//! factor         -> unary ( ( "/" | "*" ) unary )* ;
-//! unary          -> ( "!" | "-" ) unary | call ;
-//! call           -> primary ( "(" arguments? ")" )* ;
-//! arguments      -> assignment ( "," assignment )* ;
-//! primary        -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
+//! program        -> declaration* Eof
+//! declaration    -> class_decl | fun_decl | var_decl | statement
+//! class_decl     -> "class" Identifier "{" function* "}"
+//! statement      -> print | return | block | break | if | while | for | expr_stmt
+//! fun_decl       -> "fun" function
+//! function       -> Identifier "(" parameters? ")" block
+//! parameters     -> Identifier ("," Identifier)*
+//! expr_stmt      -> expression ";"
+//! print          -> "print" expression ";"
+//! return         -> "return" expression? ";"
+//! block          -> "{" declaration* "}"
+//! break          -> "break" ";"
+//! if             -> "if" "(" expression ")" statement ("else" statement)?
+//! while          -> "while" "(" expression ")" statement
+//! for            -> "for" "(" (var_decl | expr_stmt | ";")
+//!                     expression? ";" expression? ")" statement
+//! var_decl       -> "var" Identifier ("=" expression)? ";"
+//! expression     -> comma
+//! comma          -> assignment ("," assignment)*
+//! // `call` here represents a potential l-value, validated during AST construction
+//! assignment     -> call "=" assignment | ternary
+//! ternary        -> logic_or ("?" expression ":" ternary)?
+//! logic_or       -> logid_and ("or" logic_and)*
+//! logid_and      -> equality ("and" equality)*
+//! equality       -> comparison (("!=" | "==") comparison)*
+//! comparison     -> term ((">" | ">=" | "<" | "<=") term)*
+//! term           -> factor (("-" | "+") factor)*
+//! factor         -> unary (("/" | "*") unary)*
+//! unary          -> ("!" | "-") unary | call
+//! call           -> primary (function_call | get_call)*
+//! function_call  -> "(" arguments? ")"
+//! get_call       -> "." Identifier
+//! // Use assignment instead of expression to avoid parsing comma expressions in arguments
+//! arguments      -> assignment ( "," assignment )*
+//! primary        -> NUMBER | String | True | False | Nil | "(" expression ")" | Identifier
 //! ```
 
 pub(crate) mod expression;
@@ -62,28 +66,32 @@ pub(crate) mod expression;
 use std::{convert::TryInto, iter::Peekable, rc::Rc, vec::IntoIter};
 
 use TokenType::*;
-use anyhow::anyhow;
+use anyhow::Context;
 
 use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::{Expression, LiteralValue}, scanner::{Token, TokenType}, statement::{Function, Statement}};
 
 /// ParserError is the error type for the parser.
 pub struct Parser {
 	/// The tokens to parse.
-	tokens:      Peekable<IntoIter<Token>>,
+	tokens:       Peekable<IntoIter<Token>>,
 	/// The number of errors encountered during parsing.
-	error_count: usize,
+	error_count:  usize,
+	current_line: usize,
 }
 
 impl Parser {
-	pub fn new(tokens: Vec<Token>) -> Self { Self { tokens: tokens.into_iter().peekable(), error_count: 0 } }
+	pub fn new(tokens: Vec<Token>) -> Self {
+		Self { tokens: tokens.into_iter().peekable(), error_count: 0, current_line: 0 }
+	}
 
-	pub fn parse_statements(mut self) -> Result<Vec<Statement>, LoxError> {
+	/// program -> declaration* Eof
+	pub fn program(mut self) -> Result<Vec<Statement>, LoxError> {
 		let mut statements = Vec::new();
 		while let Ok(token) = self.peek() {
 			if matches!(token.r#type, TokenType::Eof) {
 				break;
 			}
-			match self.parse_declaration() {
+			match self.declaration() {
 				Ok(stmt) => statements.push(stmt),
 				Err(ParserError::InternalError(e)) => return Err(e.into()),
 				Err(ParserError::ParseError(e)) => {
@@ -95,34 +103,89 @@ impl Parser {
 		if self.error_count > 0 { Err(LoxError::ParserErrors(self.error_count)) } else { Ok(statements) }
 	}
 
-	fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
-		if matches!(self.peek()?.r#type, TokenType::Var) {
-			self.var_declaration()
-		} else if matches!(self.peek()?.r#type, TokenType::Fun) {
-			self.advance()?; // consume 'fun'
-			self.parse_function().map(Statement::Function)
-		} else if matches!(self.peek()?.r#type, TokenType::Class) {
-			self.advance()?; // consume "class"
-			let name_token = self.advance()?; // class name
-			self.advance()?; // consume '{'
-			let mut methods = vec![];
-			while !matches!(self.peek()?.r#type, TokenType::RightBrace) {
-				methods.push(self.parse_function()?);
-			}
-
-			self.advance()?; // consume '}'
-			Ok(Statement::Class { name_token, methods })
-		} else {
-			self.parse_statement()
+	/// declaration -> class_decl | fun_decl | var_decl | statement
+	#[inline]
+	fn declaration(&mut self) -> Result<Statement, ParserError> {
+		match self.peek()?.r#type {
+			TokenType::Class => self.class_decl(),
+			TokenType::Fun => self.fun_decl(),
+			TokenType::Var => self.var_decl(),
+			_ => self.statement(),
 		}
 	}
 
-	fn parse_function(&mut self) -> Result<Function, ParserError> {
-		let line = self.peek()?.line;
-		let name_token = self.advance()?; // function name
-		self.advance()?; // consume '('
+	/// class_decl -> "class" Identifier "{" function* "}"
+	#[inline]
+	fn class_decl(&mut self) -> Result<Statement, ParserError> {
+		self.current_line = self.peek()?.line;
+		self.advance()?; // consume "class"
+		let next = self.peek()?;
+		if !matches!(next.r#type, Identifier(_)) {
+			return Err(ParseError::new(self.current_line, ParseErrorType::ExpectClassName).into());
+		}
+		let name_token = self.advance()?; // class name
+		self.consume(LeftBrace)?;
+		let mut methods = vec![];
+		while !self.check(&TokenType::RightBrace)? {
+			methods.push(self.function()?);
+		}
+
+		self.consume(RightBrace)?;
+		Ok(Statement::ClassDecl { name_token, methods })
+	}
+
+	/// statement -> print | return | block | break | if | while | for | expr_stmt
+	#[inline]
+	fn statement(&mut self) -> Result<Statement, ParserError> {
+		use TokenType::*;
+
+		self.current_line = self.peek()?.line;
+
+		match &self.peek()?.r#type {
+			Print => self.print(),
+			Return => self.r#return(),
+			LeftBrace => self.block(),
+			Break => self.r#break(),
+			If => self.r#if(),
+			While => self.r#while(),
+			For => self.r#for(),
+			_ => self.expr_stmt(),
+		}
+	}
+
+	/// fun_decl -> "fun" function
+	#[inline]
+	fn fun_decl(&mut self) -> Result<Statement, ParserError> {
+		self.current_line = self.peek()?.line;
+		self.advance()?; // consume 'fun'
+		self.function().map(Statement::FunDecl)
+	}
+
+	/// function -> Identifier "(" parameters? ")" block
+	#[inline]
+	fn function(&mut self) -> Result<Function, ParserError> {
+		let next = self.peek()?;
+		if !matches!(next.r#type, Identifier(_)) {
+			return Err(ParseError::new(self.current_line, ParseErrorType::ExpectFunctionNameOnCall).into());
+		}
+		let name_token = self.advance()?; // function name Identifier
+		self.consume(LeftParen)?;
+		let parameters = Rc::new(self.parameters(self.current_line)?);
+		self.consume(RightParen)?;
+		self.consume(LeftBrace)?;
+		let mut body_statements = Vec::new();
+		while !self.check(&RightBrace)? {
+			body_statements.push(self.declaration()?);
+		}
+		self.consume(RightBrace)?;
+		Ok(Function { name_token, parameters, body: Rc::new(body_statements) })
+	}
+
+	/// parameters -> Identifier ("," Identifier)*
+	#[inline]
+	fn parameters(&mut self, line: usize) -> Result<Vec<Token>, ParserError> {
 		let mut parameters = Vec::new();
-		if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+		if !self.check(&RightParen)? {
 			loop {
 				if parameters.len() >= 255 {
 					return Err(ParseError::new(line, ParseErrorType::TooManyParameters).into());
@@ -132,168 +195,324 @@ impl Parser {
 					return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
 				}
 				parameters.push(param_token);
-				if !matches!(self.peek()?.r#type, TokenType::Comma) {
+				if !self.check(&Comma)? {
 					break;
 				}
 				self.advance()?; // consume ','
 			}
 		}
-		if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+		if !self.check(&RightParen)? {
 			return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
 		}
-		self.advance()?; // consume ')'
-		if !matches!(self.peek()?.r#type, TokenType::LeftBrace) {
-			return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
-		}
-		self.advance()?; // consume '{'
-		let mut body_statements = Vec::new();
-		while !matches!(self.peek()?.r#type, TokenType::RightBrace | TokenType::Eof) {
-			body_statements.push(self.parse_declaration()?);
-		}
-		if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
-			return Err(ParseError::new(line, ParseErrorType::ExpectRightBrace).into());
-		}
-		self.advance()?; // consume '}'
-		Ok(Function { name_token, parameters: Rc::new(parameters), body: Rc::new(body_statements) })
+		Ok(parameters)
 	}
 
-	fn var_declaration(&mut self) -> Result<Statement, ParserError> {
-		let line = self.advance()?.line; // consume 'var'
-		let name_token = self.advance()?; // variable name
+	/// expr_stmt -> expression ";"
+	#[inline]
+	fn expr_stmt(&mut self) -> Result<Statement, ParserError> {
+		let expr = *self.expression()?;
+		self.consume(Semicolon)?;
+		Ok(Statement::Expression(expr))
+	}
 
-		if !matches!(name_token.r#type, TokenType::Identifier(_)) {
-			return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
+	/// print -> "print" expression ";"
+	#[inline]
+	fn print(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "print"
+		let expr = *self.expression()?;
+		self.consume(Semicolon)?;
+		Ok(Statement::Print(expr))
+	}
+
+	/// return -> "return" expression? ";"
+	#[inline]
+	fn r#return(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "return"
+		let value = (!self.check(&Semicolon)?).then(|| self.expression()).transpose()?;
+		self.consume(Semicolon)?;
+		Ok(Statement::Return(value))
+	}
+
+	/// block -> "{" declaration* "}"
+	#[inline]
+	fn block(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume '{'
+		let mut statements = Vec::new();
+		while !self.check(&RightBrace)? {
+			statements.push(self.declaration()?);
+		}
+		self.consume(RightBrace)?;
+		Ok(Statement::Block(statements))
+	}
+
+	/// break -> "break" ";"
+	#[inline]
+	fn r#break(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "break"
+		self.consume(Semicolon)?;
+		Ok(Statement::Break)
+	}
+
+	/// if -> "if" "(" expression ")" statement ("else" statement)?
+	#[inline]
+	fn r#if(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "if"
+		self.consume(LeftParen)?;
+		let condition = *self.expression()?;
+		self.consume(RightParen)?;
+
+		let then_branch = Box::new(self.statement()?);
+		let else_branch = self
+			.check(&Else)?
+			.then(|| -> Result<_, ParserError> {
+				self.advance()?; // consume "else"
+				Ok(Box::new(self.statement()?))
+			})
+			.transpose()?;
+
+		Ok(Statement::If { condition, then_branch, else_branch })
+	}
+
+	/// while -> "while" "(" expression ")" statement
+	#[inline]
+	fn r#while(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "while"
+		self.consume(LeftParen)?;
+		let condition = *self.expression()?;
+		self.consume(RightParen)?;
+		let body = Box::new(self.statement()?);
+		Ok(Statement::While { condition, body })
+	}
+
+	/// for -> "for" "(" (var_decl | expr_stmt | ";")
+	///          expression? ";" expression? ")" statement
+	#[inline]
+	fn r#for(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "for"
+		self.consume(LeftParen)?; // consume '('
+
+		let initializer = match &self.peek()?.r#type {
+			Semicolon => {
+				self.advance()?;
+				None
+			}
+			Var => Some(self.var_decl()?),
+			_ => Some(self.statement()?),
+		};
+
+		let condition = if !self.check(&Semicolon)? { Some(*self.expression()?) } else { None };
+		self.consume(Semicolon)?;
+
+		let increment = if !self.check(&RightParen)? { Some(*self.expression()?) } else { None };
+		self.consume(RightParen)?;
+
+		let mut body = self.statement()?;
+		if let Some(inc) = increment {
+			body = Statement::Block(vec![body, Statement::Expression(inc)]);
 		}
 
-		let initializer = if matches!(self.peek()?.r#type, TokenType::Equal) {
+		let condition = condition.unwrap_or(Expression::Literal(LiteralValue::Boolean(true)));
+		body = Statement::While { condition, body: Box::new(body) };
+
+		if let Some(init) = initializer {
+			body = Statement::Block(vec![init, body]);
+		}
+
+		Ok(body)
+	}
+
+	/// var_decl -> "var" Identifier ("=" expression)? ";"
+	#[inline]
+	fn var_decl(&mut self) -> Result<Statement, ParserError> {
+		self.current_line = self.peek()?.line;
+		self.advance()?; // consume 'var'
+		if !matches!(self.peek()?.r#type, TokenType::Identifier(_)) {
+			return Err(ParseError::new(self.current_line, ParseErrorType::ExpectVariableName).into());
+		}
+		let name_token = self.advance()?; // variable name Identifier
+
+		let initializer = if self.check(&Equal)? {
 			self.advance()?; // consume '='
 			Some(*self.expression()?)
 		} else {
 			None
 		};
 
-		if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
-			return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
-		}
-		self.advance()?; // consume ';'
+		self.consume(Semicolon)?;
 
 		Ok(Statement::VarDeclaration { name_token, initializer })
 	}
 
-	fn parse_statement(&mut self) -> Result<Statement, ParserError> {
-		let line = self.peek()?.line;
-		if matches!(self.peek()?.r#type, TokenType::Print) {
-			self.advance()?; // consume 'print'
-			let expression = *self.expression()?;
-			if !matches!(self.peek()?.r#type, Semicolon) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
-			}
-			self.advance()?; // consume ';'
-			Ok(Statement::Print(expression))
-		} else if matches!(self.peek()?.r#type, TokenType::Return) {
-			self.advance()?; // consume 'return'
-			let return_value =
-				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(self.expression()?) } else { None };
-			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
-			}
-			self.advance()?; // consume ';'
-			Ok(Statement::Return(return_value))
-		} else if matches!(self.peek()?.r#type, TokenType::Break) {
-			self.advance()?; // consume 'break'
-			if !matches!(self.peek()?.r#type, Semicolon) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
-			}
-			self.advance()?; // consume ';'
-			Ok(Statement::Break)
-		} else if matches!(self.peek()?.r#type, TokenType::If) {
-			self.advance()?; // consume 'if'
-			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
-			}
-			self.advance()?; // consume '('
-			let condition = self.expression()?;
-			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
-			}
-			self.advance()?; // consume ')'
-			let then_branch = Box::new(self.parse_statement()?);
-			let else_branch = if matches!(self.peek()?.r#type, TokenType::Else) {
-				self.advance()?; // consume 'else'
-				Some(Box::new(self.parse_statement()?))
-			} else {
-				None
-			};
-			Ok(Statement::If { condition: *condition, then_branch, else_branch })
-		} else if matches!(self.peek()?.r#type, TokenType::While) {
-			self.advance()?; // consume 'while'
-			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
-			}
-			self.advance()?; // consume '('
-			let condition = self.expression()?;
-			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
-			}
-			self.advance()?; // consume ')'
-			let body = Box::new(self.parse_statement()?);
-			Ok(Statement::While { condition: *condition, body })
-		} else if matches!(self.peek()?.r#type, TokenType::For) {
-			self.advance()?; // consume 'for'
-			if !matches!(self.peek()?.r#type, TokenType::LeftParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
-			}
-			self.advance()?; // consume '('
-			let initializer = if matches!(self.peek()?.r#type, TokenType::Semicolon) {
-				self.advance()?; // consume ';'
-				None
-			} else if matches!(self.peek()?.r#type, TokenType::Var) {
-				Some(self.var_declaration()?)
-			} else {
-				Some(self.parse_statement()?)
-			};
-			let condition =
-				if !matches!(self.peek()?.r#type, TokenType::Semicolon) { Some(*self.expression()?) } else { None };
-			if !matches!(self.peek()?.r#type, TokenType::Semicolon) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
-			}
-			self.advance()?; // consume ';'
-			let increment =
-				if !matches!(self.peek()?.r#type, TokenType::RightParen) { Some(*self.expression()?) } else { None };
-			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
-			}
-			self.advance()?; // consume ')'
-			let mut body = self.parse_statement()?;
-			if let Some(inc) = increment {
-				body = Statement::Block(vec![body, Statement::Expression(inc)]);
-			}
-			let condition = condition.unwrap_or(Expression::Literal(LiteralValue::Boolean(true)));
-			body = Statement::While { condition, body: Box::new(body) };
-			if let Some(init) = initializer {
-				body = Statement::Block(vec![init, body]);
-			}
-			Ok(body)
-		} else if matches!(self.peek()?.r#type, TokenType::LeftBrace) {
-			self.advance()?; // consume '{'
-			let mut statements = Vec::new();
-			while !matches!(self.peek()?.r#type, TokenType::RightBrace | TokenType::Eof) {
-				statements.push(self.parse_declaration()?);
-			}
-			// 检查是否真的找到了 RightBrace
-			if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectRightBrace).into());
-			}
-			self.advance()?; // consume '}'
-			Ok(Statement::Block(statements))
-		} else {
-			let expression = *self.expression()?;
-			if !matches!(self.peek()?.r#type, Semicolon) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectSemicolon).into());
-			}
-			self.advance()?; // consume ';'
-			Ok(Statement::Expression(expression))
+	/// expression -> comma
+	#[inline]
+	fn expression(&mut self) -> Result<Box<Expression>, ParserError> { self.comma() }
+
+	/// comma -> assignment ("," assignment)*
+	#[inline]
+	fn comma(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expr = self.assignment()?;
+
+		while self.check(&Comma)? {
+			self.advance()?;
+			expr = Expression::comma(expr, self.assignment()?)
 		}
+		Ok(expr)
+	}
+
+	/// `call` here represents a potential l-value, validated during AST
+	/// construction
+	/// assignment -> call "=" assignment | ternary
+	#[inline]
+	fn assignment(&mut self) -> Result<Box<Expression>, ParserError> {
+		let expr = self.ternary()?;
+
+		if self.check(&Equal)? {
+			self.advance()?; // consume '='
+			if let Expression::Variable(name_token) = *expr {
+				let value = self.assignment()?;
+				return Ok(Expression::assign(name_token, value));
+			} else {
+				return Err(ParseError::new(self.current_line, ParseErrorType::InvalidAssignmentTarget).into());
+			}
+		}
+
+		Ok(expr)
+	}
+
+	/// ternary -> logic_or ("?" expression ":" ternary)?
+	#[inline]
+	fn ternary(&mut self) -> Result<Box<Expression>, ParserError> {
+		let condition = self.logic_or()?;
+
+		if self.check(&Question)? {
+			self.advance()?;
+			let then_branch = self.expression()?;
+			self.consume(Colon)?;
+			let else_branch = self.ternary()?;
+			return Ok(Expression::ternary(condition, then_branch, else_branch));
+		}
+		Ok(condition)
+	}
+
+	/// logic_or -> logic_and ("or" logic_and)*
+	#[inline]
+	fn logic_or(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.logic_and()?;
+		while self.check(&Or)? {
+			expression = Expression::logical(expression, self.advance()?, self.logic_and()?)
+		}
+		Ok(expression)
+	}
+
+	/// logic_and -> equality ("and" equality)*
+	#[inline]
+	fn logic_and(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.equality()?;
+		while self.check(&And)? {
+			expression = Expression::logical(expression, self.advance()?, self.equality()?)
+		}
+		Ok(expression)
+	}
+
+	/// equality -> comparison (("!=" | "==") comparison)*
+	#[inline]
+	fn equality(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.comparison()?;
+		while matches!(self.peek()?.r#type, BangEqual | EqualEqual) {
+			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
+		}
+		Ok(expression)
+	}
+
+	/// comparison -> term ((">" | ">=" | "<" | "<=") term)*
+	#[inline]
+	fn comparison(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.term()?;
+		while matches!(self.peek()?.r#type, Greater | GreaterEqual | Less | LessEqual) {
+			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
+		}
+		Ok(expression)
+	}
+
+	/// term -> factor (("-" | "+") factor)*
+	#[inline]
+	fn term(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.factor()?;
+		while matches!(self.peek()?.r#type, Minus | Plus) {
+			expression = Expression::binary(expression, self.advance()?, self.factor()?)
+		}
+		Ok(expression)
+	}
+
+	/// factor -> unary (("/" | "*") unary)*
+	#[inline]
+	fn factor(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expression = self.unary()?;
+		while matches!(self.peek()?.r#type, Slash | Star) {
+			expression = Expression::binary(expression, self.advance()?, self.unary()?)
+		}
+		Ok(expression)
+	}
+
+	/// unary -> ("!" | "-") unary | call
+	#[inline]
+	fn unary(&mut self) -> Result<Box<Expression>, ParserError> {
+		if matches!(self.peek()?.r#type, Bang | Minus) {
+			return Ok(Expression::unary(self.advance()?, self.unary()?));
+		}
+		self.call()
+	}
+
+	/// call -> primary (function_call | get_call)*
+	#[inline]
+	fn call(&mut self) -> Result<Box<Expression>, ParserError> {
+		let mut expr = self.primary()?;
+
+		loop {
+			expr = match self.peek()?.r#type {
+				LeftParen => self.function_call(expr)?,
+				Dot => self.get_call(expr)?,
+				_ => break,
+			}
+		}
+
+		Ok(expr)
+	}
+
+	/// function_call -> "(" arguments? ")"
+	#[inline]
+	fn function_call(&mut self, expr: Box<Expression>) -> Result<Box<Expression>, ParserError> {
+		self.advance()?; // consume '('
+		let mut arguments = Vec::new();
+		if !self.check(&RightParen)? {
+			loop {
+				if arguments.len() >= 255 {
+					return Err(ParseError::new(self.current_line, ParseErrorType::TooManyArguments).into());
+				}
+				// Use assignment() instead of expression() to avoid parsing comma expressions
+				// in function arguments
+				arguments.push(*self.assignment()?);
+				if !self.check(&Comma)? {
+					break;
+				}
+				self.advance()?; // consume ','
+			}
+		}
+		self.consume(RightParen)?;
+
+		Ok(Expression::call(expr, self.current_line, arguments))
+	}
+
+	/// get_call -> "." Identifier
+	#[inline]
+	fn get_call(&mut self, expr: Box<Expression>) -> Result<Box<Expression>, ParserError> {
+		self.advance()?; // consume dot
+
+		if !matches!(self.peek()?.r#type, Identifier(_)) {
+			return Err(ParseError::new(self.current_line, ParseErrorType::ExpectPropertyName).into());
+		}
+		let property = self.advance()?; // instance
+		Ok(Expression::get(expr, property))
 	}
 
 	#[allow(unused)]
@@ -312,151 +531,8 @@ impl Parser {
 		}
 	}
 
-	/// Parse comma expressions.
-	fn expression(&mut self) -> Result<Box<Expression>, ParserError> { self.comma() }
-
-	#[allow(dead_code)]
-	/// Parse comma expressions.
-	fn comma(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expr = self.assignment()?;
-
-		while matches!(self.peek()?.r#type, Comma) {
-			self.advance()?;
-			expr = Expression::comma(expr, self.assignment()?)
-		}
-		Ok(expr)
-	}
-
-	/// Parse assignment expressions.
-	fn assignment(&mut self) -> Result<Box<Expression>, ParserError> {
-		let expr = self.ternary()?;
-
-		if matches!(self.peek()?.r#type, Equal) {
-			let line = self.advance()?.line; // consume '='
-			if let Expression::Variable(name_token) = *expr {
-				let value = self.assignment()?;
-				return Ok(Expression::assign(name_token, value));
-			} else {
-				return Err(ParseError::new(line, ParseErrorType::InvalidAssignmentTarget).into());
-			}
-		}
-
-		Ok(expr)
-	}
-
-	/// Parse ternary expressions.
-	fn ternary(&mut self) -> Result<Box<Expression>, ParserError> {
-		let condition = self.logic_or()?;
-
-		if matches!(self.peek()?.r#type, Question) {
-			self.advance()?;
-			let then_branch = self.expression()?;
-			if !matches!(self.peek()?.r#type, Colon) {
-				return Err(
-					ParseError::new(self.peek()?.line, ParseErrorType::UnexpectedToken(":".to_string())).into(),
-				);
-			}
-			self.advance()?;
-			let else_branch = self.ternary()?;
-			return Ok(Expression::ternary(condition, then_branch, else_branch));
-		}
-		Ok(condition)
-	}
-
-	/// Parse logical OR expressions.
-	fn logic_or(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expression = self.logic_and()?;
-		while matches!(self.peek()?.r#type, Or) {
-			expression = Expression::logical(expression, self.advance()?, self.logic_and()?)
-		}
-		Ok(expression)
-	}
-
-	/// Parse logical AND expressions.
-	fn logic_and(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expression = self.equality()?;
-		while matches!(self.peek()?.r#type, And) {
-			expression = Expression::logical(expression, self.advance()?, self.equality()?)
-		}
-		Ok(expression)
-	}
-
-	/// Parse equality expressions.
-	fn equality(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expression = self.comparison()?;
-		while matches!(self.peek()?.r#type, BangEqual | EqualEqual) {
-			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
-		}
-		Ok(expression)
-	}
-
-	/// Parse comparison expressions.
-	fn comparison(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expression = self.term()?;
-		while matches!(self.peek()?.r#type, Greater | GreaterEqual | Less | LessEqual) {
-			expression = Expression::binary(expression, self.advance()?, self.comparison()?)
-		}
-		Ok(expression)
-	}
-
-	/// Parse term expressions.
-	fn term(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expression = self.factor()?;
-		while matches!(self.peek()?.r#type, Minus | Plus) {
-			expression = Expression::binary(expression, self.advance()?, self.factor()?)
-		}
-		Ok(expression)
-	}
-
-	/// Parse factor expressions.
-	fn factor(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expression = self.unary()?;
-		while matches!(self.peek()?.r#type, Slash | Star) {
-			expression = Expression::binary(expression, self.advance()?, self.unary()?)
-		}
-		Ok(expression)
-	}
-
-	/// Parse unary expressions.
-	fn unary(&mut self) -> Result<Box<Expression>, ParserError> {
-		if matches!(self.peek()?.r#type, Bang | Minus) {
-			return Ok(Expression::unary(self.advance()?, self.unary()?));
-		}
-		self.call()
-	}
-
-	fn call(&mut self) -> Result<Box<Expression>, ParserError> {
-		let mut expr = self.primary()?;
-
-		while matches!(self.peek()?.r#type, LeftParen) {
-			self.advance()?; // consume '('
-			let mut arguments = Vec::new();
-			if !matches!(self.peek()?.r#type, RightParen) {
-				loop {
-					if arguments.len() >= 255 {
-						return Err(ParseError::new(self.peek()?.line, ParseErrorType::TooManyArguments).into());
-					}
-					// Use assignment() instead of expression() to avoid parsing comma expressions
-					// in function arguments
-					arguments.push(*self.assignment()?);
-					if !matches!(self.peek()?.r#type, Comma) {
-						break;
-					}
-					self.advance()?; // consume ','
-				}
-			}
-			if !matches!(self.peek()?.r#type, RightParen) {
-				return Err(ParseError::new(self.peek()?.line, ParseErrorType::UnterminatedParenthesis).into());
-			}
-			self.advance()?; // consume ')'
-
-			expr = Expression::call(expr, self.peek()?.clone(), arguments);
-		}
-
-		Ok(expr)
-	}
-
 	/// Parse primary expressions.
+	#[inline]
 	fn primary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let token = self.peek()?;
 		match &token.r#type {
@@ -467,30 +543,27 @@ impl Parser {
 			LeftParen => {
 				self.advance()?; // consume '('
 				let expr = self.expression()?;
-
-				if !matches!(self.peek()?.r#type, RightParen) {
-					return Err(ParseError::new(self.peek()?.line, ParseErrorType::UnterminatedParenthesis).into());
-				}
-				self.advance()?; // consume ')'
+				self.consume(RightParen)?;
 
 				Ok(Expression::grouping(expr))
 			}
 			_ => {
 				let err_string = token.lexeme.to_string();
-				Err(ParseError::new(token.line, ParseErrorType::UnexpectedToken(err_string)).into())
+				Err(ParseError::new(self.current_line, ParseErrorType::UnexpectedToken(err_string)).into())
 			}
 		}
 	}
 
 	/// Advance to the next token.
-	fn advance(&mut self) -> anyhow::Result<Token> {
-		self.tokens.next().ok_or_else(|| anyhow!("Unexpected EOF"))
-	}
+	#[inline]
+	fn advance(&mut self) -> anyhow::Result<Token> { self.tokens.next().with_context(|| "Unexpected EOF") }
 
 	/// Peek at the current token.
-	fn peek(&mut self) -> anyhow::Result<&Token> { self.tokens.peek().ok_or_else(|| anyhow!("Unexpected EOF")) }
+	#[inline]
+	fn peek(&mut self) -> anyhow::Result<&Token> { self.tokens.peek().with_context(|| "Unexpected EOF") }
 
 	/// Synchronize the parser after an error.
+	#[inline]
 	fn synchronize(&mut self, error: &ParseError) -> anyhow::Result<()> {
 		self.error_count += 1;
 		eprintln!("{error}");
@@ -502,6 +575,29 @@ impl Parser {
 		}
 		Ok(())
 	}
+
+	/// Consume next token
+	#[inline]
+	fn consume(&mut self, ty: TokenType) -> Result<Token, ParserError> {
+		use ParseErrorType::*;
+		if !self.check(&ty)? {
+			let err = match ty {
+				LeftBrace => ExpectLeftBrace,
+				RightBrace => ExpectRightBrace,
+				LeftParen => ExpectLeftParen,
+				RightParen => ExpectRightParen,
+				Semicolon => ExpectSemicolon,
+				Colon => ExpectColon,
+				_ => return Err(anyhow::anyhow!("unreachable!").into()),
+			};
+			return Err(ParseError::new(self.current_line, err).into());
+		}
+		Ok(self.advance()?)
+	}
+
+	/// Check next token
+	#[inline]
+	fn check(&mut self, ty: &TokenType) -> Result<bool, ParserError> { Ok(&self.peek()?.r#type == ty) }
 }
 
 #[cfg(test)]

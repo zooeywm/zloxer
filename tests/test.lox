@@ -82,7 +82,7 @@ for (var i = 0; i < 20; i = i + 1) {
   fib(i);
 }
 var elapsed = clock() - start;
-print elapsed * 1000 + "ms";
+print "elapsed: " + elapsed * 1000 + "ms";
 
 fun makeCounter() {
   var i = 0;
@@ -176,3 +176,14 @@ print DevonshireCream; // Prints "DevonshireCream".
 
 var cream = DevonshireCream();
 print cream;
+
+fun testfn(n){
+    print n;
+    return n+1;
+}
+
+var test = testfn(1),testfn(2),testfn(3);
+print test;
+
+var x = 1 > 2 ? 3 : 10;
+print x;

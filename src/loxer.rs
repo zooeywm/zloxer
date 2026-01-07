@@ -66,7 +66,7 @@ impl Loxer {
 		let scanner = Scanner::new(leaked);
 		let tokens = scanner.scan_tokens()?;
 		let parser = Parser::new(tokens);
-		let statements = parser.parse_statements()?;
+		let statements = parser.program()?;
 		self.interpreter.interpret_statements(&statements)?;
 
 		Ok(())

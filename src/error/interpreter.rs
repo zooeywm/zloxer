@@ -24,6 +24,10 @@ pub enum InterpreterError {
 	#[error("")]
 	#[allow(private_interfaces)]
 	Return(RcCell<Value>),
+	#[error("Only Instances have proterties.")]
+	GetPropertyError,
+	#[error("Undefined property: {0}")]
+	UndefinedProperty(&'static str),
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

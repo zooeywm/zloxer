@@ -16,11 +16,13 @@ pub(crate) enum Expression {
 	Unary { operator: Token, right: Box<Expression> },
 	Variable(Token),
 	Binary { left: Box<Expression>, operator: Token, right: Box<Expression> },
-	Call { callee: Box<Expression>, paren: Token, arguments: Vec<Expression> },
+	Call { callee: Box<Expression>, line: usize, arguments: Vec<Expression> },
+	Get { instance: Box<Expression>, property: Token },
 	Grouping(Box<Expression>),
 	Comma { left: Box<Expression>, right: Box<Expression> },
 	Ternary { condition: Box<Expression>, then_branch: Box<Expression>, else_branch: Box<Expression> },
 	Assign { target: Token, value: Box<Expression> },
+	Set { instance: Box<Expression>, property: Token, value: Box<Expression> },
 }
 
 impl Expression {
@@ -48,8 +50,12 @@ impl Expression {
 		Box::new(Expression::Logical { left, operator, right })
 	}
 
-	pub fn call(callee: Box<Self>, paren: Token, arguments: Vec<Self>) -> Box<Self> {
-		Box::new(Expression::Call { callee, paren, arguments })
+	pub fn call(callee: Box<Self>, line: usize, arguments: Vec<Self>) -> Box<Self> {
+		Box::new(Expression::Call { callee, line, arguments })
+	}
+
+	pub fn get(instance: Box<Self>, property: Token) -> Box<Self> {
+		Box::new(Expression::Get { instance, property })
 	}
 }
 
@@ -95,11 +101,13 @@ impl std::fmt::Display for Expression {
 			Variable(token) => write!(f, "{}", token.lexeme),
 			Assign { target: name, value } => write!(f, "(= {} {value})", name.lexeme),
 			Logical { left, operator, right } => write!(f, "({} {left} {right})", operator.lexeme),
-			Call { callee, paren: _, arguments } => write!(
+			Call { callee, line: _, arguments } => write!(
 				f,
 				"(call {callee} ({}) )",
 				arguments.iter().map(|arg| format!("{arg}")).collect::<Vec<String>>().join(" ")
 			),
+			Get { instance, property } => write!(f, "(get {instance}.{})", property.lexeme),
+			Set { instance, property, value } => write!(f, "(set {instance}.{}={value})", property.lexeme),
 		}
 	}
 }

@@ -11,7 +11,7 @@ use crate::{parser::expression::Expression, scanner::Token};
 pub enum Statement {
 	/// An expression used as a statement.
 	Expression(Expression),
-	Function(Function),
+	FunDecl(Function),
 	If {
 		condition:   Expression,
 		then_branch: Box<Statement>,
@@ -27,7 +27,7 @@ pub enum Statement {
 	Return(Option<Box<Expression>>),
 	/// A block of statements.
 	Block(Vec<Statement>),
-	Class {
+	ClassDecl {
 		name_token: Token,
 		methods:    Vec<Function>,
 	},
@@ -57,7 +57,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		parser.parse_statements().unwrap().len()
+		parser.program().unwrap().len()
 	}
 
 	/// Helper function to parse a string and check if the first statement matches
@@ -68,7 +68,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 
 		match expected_type {
 			"print" => matches!(statements[0], Statement::Print(_)),
@@ -85,7 +85,7 @@ mod tests {
 		let scanner = Scanner::new(input);
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 
 		match &statements[0] {
 			Statement::VarDeclaration { name_token, initializer } => {
@@ -142,7 +142,7 @@ mod tests {
 		let scanner = Scanner::new("var x = 5; print x;");
 		let tokens = scanner.scan_tokens().unwrap();
 		let parser = crate::parser::Parser::new(tokens);
-		let statements = parser.parse_statements().unwrap();
+		let statements = parser.program().unwrap();
 
 		use crate::statement::Statement;
 		assert!(matches!(statements[0], Statement::VarDeclaration { .. }));
