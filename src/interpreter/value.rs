@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use Value::*;
 
-use crate::interpreter::callable::CallableValue;
+use crate::{interpreter::{callable::CallableValue, class::ClassValue, instance::InstanceValue}, utils::RcCell};
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
@@ -13,6 +13,8 @@ pub(crate) enum Value {
 	Number(f64),
 	StringValue(String),
 	Callable(CallableValue),
+	Class(RcCell<ClassValue>),
+	Instance(InstanceValue),
 }
 
 impl Display for Value {
@@ -40,6 +42,8 @@ impl Display for Value {
 				}
 				write!(f, ")>")
 			}
+			Class(class) => write!(f, "{}", class.borrow()),
+			Instance(instance) => write!(f, "{instance}"),
 		}
 	}
 }
@@ -73,6 +77,8 @@ impl Value {
 			StringValue(s) => !s.is_empty(),
 			Number(n) => *n != 0.0,
 			Callable { .. } => true,
+			Class(_) => true,
+			Instance(_) => true,
 		}
 	}
 

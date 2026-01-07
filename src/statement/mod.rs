@@ -11,11 +11,7 @@ use crate::{parser::expression::Expression, scanner::Token};
 pub enum Statement {
 	/// An expression used as a statement.
 	Expression(Expression),
-	FunctionDeclaration {
-		name_token: Token,
-		parameters: Rc<Vec<Token>>,
-		body:       Rc<Vec<Statement>>,
-	},
+	Function(Function),
 	If {
 		condition:   Expression,
 		then_branch: Box<Statement>,
@@ -31,6 +27,10 @@ pub enum Statement {
 	Return(Option<Box<Expression>>),
 	/// A block of statements.
 	Block(Vec<Statement>),
+	Class {
+		name_token: Token,
+		methods:    Vec<Function>,
+	},
 	/// A variable declaration statement.
 	VarDeclaration {
 		/// The token of the variable being declared.
@@ -42,6 +42,12 @@ pub enum Statement {
 	Break,
 }
 
+#[derive(Debug)]
+pub struct Function {
+	pub name_token: Token,
+	pub parameters: Rc<Vec<Token>>,
+	pub body:       Rc<Vec<Statement>>,
+}
 #[cfg(test)]
 mod tests {
 	use crate::scanner::Scanner;

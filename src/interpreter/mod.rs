@@ -13,6 +13,8 @@
 //! - **Ternary**: Conditional operator `?:`
 
 pub(crate) mod callable;
+pub(crate) mod class;
+pub(crate) mod instance;
 pub(crate) mod value;
 
 use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
@@ -20,7 +22,7 @@ use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
 
-use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::callable::{CallableType, CallableValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::{Token, TokenType::*}, statement::Statement, utils::RcCell};
+use crate::{LoxError, environment::Environment, error::interpreter::InterpreterError, interpreter::{callable::{CallableType, CallableValue}, class::ClassValue, instance::InstanceValue}, parser::expression::{Expression, LiteralValue::{self, *}}, scanner::{Token, TokenType::*}, statement::{Function, Statement}, utils::RcCell};
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter {
@@ -91,7 +93,7 @@ impl Interpreter {
 				// Return Break error to signal loop termination
 				return Err(InterpreterError::Break);
 			}
-			Statement::FunctionDeclaration { name_token, parameters, body } => {
+			Statement::Function(Function { name_token, parameters, body }) => {
 				// Create a closure by capturing the current environment
 				let callable = CallableValue::new_lox(
 					name_token.lexeme,
@@ -109,6 +111,10 @@ impl Interpreter {
 					RcCell::new(Value::Nil)
 				};
 				return Err(InterpreterError::Return(value));
+			}
+			Statement::Class { name_token, methods } => {
+				let class = RcCell::new(ClassValue::new(name_token.lexeme));
+				self.environment.define(name_token, RcCell::new(Value::Class(class)));
 			}
 		}
 		Ok(())
@@ -265,6 +271,10 @@ impl Interpreter {
 						}
 					}
 				})
+			}
+			Value::Class(class) => {
+				let instance = InstanceValue::new(class.clone());
+				Ok(RcCell::new(Value::Instance(instance)))
 			}
 			_ => Err(InterpreterError::NotCallable(format!("line {}: '{value}'", paren.line))),
 		}

@@ -143,6 +143,8 @@ var multiplyBy10Minus5 = createMultiplierAndAdder(10, -5);
 print multiplyBy2Add3(5);   // prints "13" (5*2+3)
 print multiplyBy10Minus5(3); // prints "25" (3*10-5)
 
+print "createMultiplierAndAdder(2, 3)(5): " + createMultiplierAndAdder(2, 3)(5);
+
 fun scope(a) {
   print "before shadow: " + a;
   // Shadow a value
@@ -152,3 +154,25 @@ fun scope(a) {
 }
 
 scope("abc");
+
+var a = "global";
+{
+  fun showA() {
+    print a;
+  }
+
+  showA();
+  var a = "block";
+  showA();
+}
+
+class DevonshireCream {
+  serveOn() {
+    return "Scones";
+  }
+}
+
+print DevonshireCream; // Prints "DevonshireCream".
+
+var cream = DevonshireCream();
+print cream;

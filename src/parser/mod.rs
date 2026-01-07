@@ -25,7 +25,8 @@
 //!
 //! ``` BNF
 //! program        -> declaration* EOF ;
-//! declaration    -> funDecl | varDecl | statement ;
+//! declaration    -> classDecl | funDecl | varDecl | statement ;
+//! classDecl      -> "class" IDENTIFIER "{" function* "}" ;
 //! statement      -> exprStmt | if | while | for | print | return | block | break ;
 //! funDecl        -> "fun" function ;
 //! function       -> IDENTIFIER "(" parameters? ")" block ;
@@ -63,7 +64,7 @@ use std::{convert::TryInto, iter::Peekable, rc::Rc, vec::IntoIter};
 use TokenType::*;
 use anyhow::anyhow;
 
-use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::{Expression, LiteralValue}, scanner::{Token, TokenType}, statement::Statement};
+use crate::{LoxError, error::parser::{ParseError, ParseErrorType, ParserError}, parser::expression::{Expression, LiteralValue}, scanner::{Token, TokenType}, statement::{Function, Statement}};
 
 /// ParserError is the error type for the parser.
 pub struct Parser {
@@ -95,59 +96,70 @@ impl Parser {
 	}
 
 	fn parse_declaration(&mut self) -> Result<Statement, ParserError> {
-		let line = self.peek()?.line; // consume 'fun'
 		if matches!(self.peek()?.r#type, TokenType::Var) {
 			self.var_declaration()
 		} else if matches!(self.peek()?.r#type, TokenType::Fun) {
 			self.advance()?; // consume 'fun'
-			let name_token = self.advance()?;
-			self.advance()?; // consume '('
-			let mut parameters = Vec::new();
-			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				loop {
-					if parameters.len() >= 255 {
-						return Err(ParseError::new(line, ParseErrorType::TooManyParameters).into());
-					}
-					let param_token = self.advance()?;
-					if !matches!(param_token.r#type, TokenType::Identifier(_)) {
-						return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
-					}
-					parameters.push(param_token);
-					if !matches!(self.peek()?.r#type, TokenType::Comma) {
-						break;
-					}
-					self.advance()?; // consume ','
-				}
-			}
-			if !matches!(self.peek()?.r#type, TokenType::RightParen) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
-			}
-			self.advance()?; // consume ')'
-			if !matches!(self.peek()?.r#type, TokenType::LeftBrace) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
-			}
+			self.parse_function().map(Statement::Function)
+		} else if matches!(self.peek()?.r#type, TokenType::Class) {
+			self.advance()?; // consume "class"
+			let name_token = self.advance()?; // class name
 			self.advance()?; // consume '{'
-			let mut body_statements = Vec::new();
-			while !matches!(self.peek()?.r#type, TokenType::RightBrace | TokenType::Eof) {
-				body_statements.push(self.parse_declaration()?);
+			let mut methods = vec![];
+			while !matches!(self.peek()?.r#type, TokenType::RightBrace) {
+				methods.push(self.parse_function()?);
 			}
-			if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
-				return Err(ParseError::new(line, ParseErrorType::ExpectRightBrace).into());
-			}
+
 			self.advance()?; // consume '}'
-			Ok(Statement::FunctionDeclaration {
-				name_token,
-				parameters: Rc::new(parameters),
-				body: Rc::new(body_statements),
-			})
+			Ok(Statement::Class { name_token, methods })
 		} else {
 			self.parse_statement()
 		}
 	}
 
+	fn parse_function(&mut self) -> Result<Function, ParserError> {
+		let line = self.peek()?.line;
+		let name_token = self.advance()?; // function name
+		self.advance()?; // consume '('
+		let mut parameters = Vec::new();
+		if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+			loop {
+				if parameters.len() >= 255 {
+					return Err(ParseError::new(line, ParseErrorType::TooManyParameters).into());
+				}
+				let param_token = self.advance()?; // parameter
+				if !matches!(param_token.r#type, TokenType::Identifier(_)) {
+					return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
+				}
+				parameters.push(param_token);
+				if !matches!(self.peek()?.r#type, TokenType::Comma) {
+					break;
+				}
+				self.advance()?; // consume ','
+			}
+		}
+		if !matches!(self.peek()?.r#type, TokenType::RightParen) {
+			return Err(ParseError::new(line, ParseErrorType::ExpectRightParen).into());
+		}
+		self.advance()?; // consume ')'
+		if !matches!(self.peek()?.r#type, TokenType::LeftBrace) {
+			return Err(ParseError::new(line, ParseErrorType::ExpectLeftParen).into());
+		}
+		self.advance()?; // consume '{'
+		let mut body_statements = Vec::new();
+		while !matches!(self.peek()?.r#type, TokenType::RightBrace | TokenType::Eof) {
+			body_statements.push(self.parse_declaration()?);
+		}
+		if !matches!(self.peek()?.r#type, TokenType::RightBrace) {
+			return Err(ParseError::new(line, ParseErrorType::ExpectRightBrace).into());
+		}
+		self.advance()?; // consume '}'
+		Ok(Function { name_token, parameters: Rc::new(parameters), body: Rc::new(body_statements) })
+	}
+
 	fn var_declaration(&mut self) -> Result<Statement, ParserError> {
 		let line = self.advance()?.line; // consume 'var'
-		let name_token = self.advance()?;
+		let name_token = self.advance()?; // variable name
 
 		if !matches!(name_token.r#type, TokenType::Identifier(_)) {
 			return Err(ParseError::new(line, ParseErrorType::ExpectVariableName).into());
@@ -320,12 +332,12 @@ impl Parser {
 		let expr = self.ternary()?;
 
 		if matches!(self.peek()?.r#type, Equal) {
-			let equals = self.advance()?;
+			let line = self.advance()?.line; // consume '='
 			if let Expression::Variable(name_token) = *expr {
 				let value = self.assignment()?;
 				return Ok(Expression::assign(name_token, value));
 			} else {
-				return Err(ParseError::new(equals.line, ParseErrorType::InvalidAssignmentTarget).into());
+				return Err(ParseError::new(line, ParseErrorType::InvalidAssignmentTarget).into());
 			}
 		}
 
