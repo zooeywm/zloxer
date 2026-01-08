@@ -20,14 +20,7 @@ impl InstanceValue {
 				.fields
 				.get(property.lexeme)
 				.cloned()
-				.or_else(|| {
-					instance
-						.class
-						.borrow()
-						.methods
-						.get(property.lexeme)
-						.map(|method| RcCell::new(Value::Callable(method.clone())))
-				})
+				.or_else(|| instance.class.borrow().methods.get(property.lexeme).cloned())
 				.ok_or(InterpreterError::UndefinedProperty(property.lexeme))?;
 			Ok(match &mut *value.clone().borrow_mut() {
 				Value::Callable(CallableValue { closure, .. }) => {

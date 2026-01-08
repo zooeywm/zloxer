@@ -17,7 +17,7 @@ pub(crate) mod class;
 pub(crate) mod instance;
 pub(crate) mod value;
 
-use std::{collections::HashMap, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
+use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
@@ -28,6 +28,7 @@ use crate::{LoxError, environment::Environment, error::interpreter::InterpreterE
 pub struct Interpreter {
 	environment:      Box<Environment>,
 	current_instance: Option<RcCell<Value>>,
+	is_initializer:   bool,
 }
 
 impl Interpreter {
@@ -41,7 +42,7 @@ impl Interpreter {
 		});
 		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure, RcCell::default());
 		environment.define_native("clock", Value::Callable(callable_value));
-		Self { environment: Box::new(environment), current_instance: None }
+		Self { environment: Box::new(environment), current_instance: None, is_initializer: false }
 	}
 
 	pub fn interpret_statements(&mut self, statements: &[Statement]) -> Result<(), InterpreterError> {
@@ -51,6 +52,7 @@ impl Interpreter {
 		Ok(())
 	}
 
+	#[inline]
 	fn interpret_statement(&mut self, statement: &Statement) -> Result<(), InterpreterError> {
 		match statement {
 			Statement::Expression(expression) => {
@@ -107,6 +109,9 @@ impl Interpreter {
 			}
 			Statement::Return(expression) => {
 				let value = if let Some(expression) = expression {
+					if self.is_initializer {
+						return Err(InterpreterError::ReturnFromInitializer);
+					}
 					self.evaluate(expression)?
 				} else {
 					RcCell::new(Value::Nil)
@@ -114,15 +119,15 @@ impl Interpreter {
 				return Err(InterpreterError::Return(value));
 			}
 			Statement::ClassDeclaration { name_token, methods } => {
-				let methods: HashMap<&'static str, CallableValue> = methods
+				let methods = methods
 					.iter()
 					.map(|Function { name_token, parameters, body }| {
-						let callable = CallableValue::new_lox(
+						let callable = RcCell::new(Value::Callable(CallableValue::new_lox(
 							name_token.lexeme,
 							parameters.clone(),
 							body.clone(),
 							RcCell::new((*self.environment).clone()),
-						);
+						)));
 						(name_token.lexeme, callable)
 					})
 					.collect();
@@ -133,6 +138,7 @@ impl Interpreter {
 		Ok(())
 	}
 
+	#[inline]
 	fn interpret_block(
 		&mut self,
 		statements: &[Statement],
@@ -152,6 +158,7 @@ impl Interpreter {
 	}
 
 	/// Interpret the given expression and print the result.
+	#[inline]
 	pub fn interpret_expression(&mut self, expr: Expression) -> Result<(), LoxError> {
 		let value = self.evaluate(&expr)?;
 		let value = value.borrow();
@@ -160,6 +167,7 @@ impl Interpreter {
 	}
 
 	/// Evaluate the given expression and return its value.
+	#[inline]
 	fn evaluate(&mut self, expr: &Expression) -> Result<RcCell<Value>, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => RcCell::new(match lit {
@@ -273,6 +281,7 @@ impl Interpreter {
 		})
 	}
 
+	#[inline]
 	fn call(
 		&mut self,
 		value: &Value,
@@ -294,6 +303,10 @@ impl Interpreter {
 					CallableType::Lox(statements) => {
 						// If is instance method call, record the instance
 						if let Some(instance_value) = closure.borrow().get("this") {
+							// If we call init on an instance, return the instance directly
+							if name.eq(&"init") {
+								return Ok(instance_value);
+							}
 							self.current_instance.replace(instance_value.clone());
 						}
 
@@ -313,8 +326,15 @@ impl Interpreter {
 				})
 			}
 			Value::Class(class) => {
-				let instance = InstanceValue::new(class.clone());
-				Ok(RcCell::new(Value::Instance(instance)))
+				let instance = RcCell::new(Value::Instance(InstanceValue::new(class.clone())));
+				if let Some(initializer) = class.borrow().methods.get("init") {
+					self.current_instance.replace(instance.clone());
+					self.is_initializer = true;
+					self.call(&initializer.borrow(), line, args)?;
+					self.current_instance.take();
+					self.is_initializer = false;
+				}
+				Ok(instance)
 			}
 			_ => Err(InterpreterError::NotCallable(format!("line {}: '{value}'", line))),
 		}

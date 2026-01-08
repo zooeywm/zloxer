@@ -251,3 +251,15 @@ class Cake {
 var cake = Cake();
 cake.flavor = "German chocolate";
 cake.taste(); // Prints "The German chocolate cake is delicious!".
+
+class Foo {
+  init() {
+    print this;
+    // this will cause error
+    // return 2;
+    return;
+  }
+}
+
+var foo = Foo();
+print foo.init();

@@ -24,6 +24,8 @@ pub enum InterpreterError {
 	#[error("")]
 	#[allow(private_interfaces)]
 	Return(RcCell<Value>),
+	#[error("Cannot return a value from initializer")]
+	ReturnFromInitializer,
 	#[error("Cannot get property from non-instance")]
 	GetPropertyError,
 	#[error("Cannot set property to non-instance")]

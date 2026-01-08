@@ -1,15 +1,15 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::interpreter::callable::CallableValue;
+use crate::{interpreter::value::Value, utils::RcCell};
 
 #[derive(Debug)]
 pub struct ClassValue {
 	pub name:    &'static str,
-	pub methods: HashMap<&'static str, CallableValue>,
+	pub methods: HashMap<&'static str, RcCell<Value>>,
 }
 
 impl ClassValue {
-	pub fn new(name: &'static str, methods: HashMap<&'static str, CallableValue>) -> Self {
+	pub fn new(name: &'static str, methods: HashMap<&'static str, RcCell<Value>>) -> Self {
 		Self { name, methods }
 	}
 }
