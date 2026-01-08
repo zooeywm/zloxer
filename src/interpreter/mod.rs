@@ -121,14 +121,18 @@ impl Interpreter {
 			Statement::ClassDeclaration { name_token, methods } => {
 				let methods = methods
 					.iter()
-					.map(|Function { name_token, parameters, body }| {
+					.filter_map(|Function { name_token, parameters, body }| {
+						if name_token.lexeme.eq("init") {
+							// init method can be called when create the instance
+							return None;
+						}
 						let callable = RcCell::new(Value::Callable(CallableValue::new_lox(
 							name_token.lexeme,
 							parameters.clone(),
 							body.clone(),
 							RcCell::new((*self.environment).clone()),
 						)));
-						(name_token.lexeme, callable)
+						Some((name_token.lexeme, callable))
 					})
 					.collect();
 				let class = RcCell::new(ClassValue::new(name_token.lexeme, methods));

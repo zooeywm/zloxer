@@ -253,7 +253,8 @@ cake.flavor = "German chocolate";
 cake.taste(); // Prints "The German chocolate cake is delicious!".
 
 class Foo {
-  init() {
+  init(a) {
+      print a;
     print this;
     // this will cause error
     // return 2;
@@ -261,5 +262,7 @@ class Foo {
   }
 }
 
-var foo = Foo();
-print foo.init();
+var foo = Foo(2);
+// there will be no method user can call named `init`
+// this will result in error.
+// foo.init(3);
