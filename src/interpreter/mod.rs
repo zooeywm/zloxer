@@ -236,14 +236,25 @@ impl Interpreter {
 				}
 				self.call(callee_value, *line, &arg_values)?
 			}
-			Get { instance, property } => {
+			PropertyGet { instance, property } => {
 				let instance = self.evaluate(instance)?;
 				if let Value::Instance(instance) = &*instance.borrow() {
 					return instance.get(property);
 				}
 				return Err(InterpreterError::GetPropertyError);
 			}
-			Set { instance, property, value } => todo!(),
+			PropertySet { instance, property, value } => {
+				let instance = self.evaluate(instance)?;
+
+				match &mut *instance.borrow_mut() {
+					Value::Instance(instance_value) => {
+						let value = self.evaluate(value)?;
+						instance_value.set(property, value.clone());
+						return Ok(value);
+					}
+					_ => return Err(InterpreterError::SetPropertyError),
+				}
+			}
 		})
 	}
 

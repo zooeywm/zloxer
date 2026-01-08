@@ -12,17 +12,17 @@ use crate::scanner::Token;
 #[derive(Debug)]
 pub(crate) enum Expression {
 	Literal(LiteralValue),
-	Logical { left: Box<Expression>, operator: Token, right: Box<Expression> },
-	Unary { operator: Token, right: Box<Expression> },
 	Variable(Token),
+	Unary { operator: Token, right: Box<Expression> },
 	Binary { left: Box<Expression>, operator: Token, right: Box<Expression> },
+	Logical { left: Box<Expression>, operator: Token, right: Box<Expression> },
 	Call { callee: Box<Expression>, line: usize, arguments: Vec<Expression> },
-	Get { instance: Box<Expression>, property: Token },
-	Grouping(Box<Expression>),
-	Comma { left: Box<Expression>, right: Box<Expression> },
-	Ternary { condition: Box<Expression>, then_branch: Box<Expression>, else_branch: Box<Expression> },
+	PropertyGet { instance: Box<Expression>, property: Token },
+	PropertySet { instance: Box<Expression>, property: Token, value: Box<Expression> },
 	Assign { target: Token, value: Box<Expression> },
-	Set { instance: Box<Expression>, property: Token, value: Box<Expression> },
+	Ternary { condition: Box<Expression>, then_branch: Box<Expression>, else_branch: Box<Expression> },
+	Comma { left: Box<Expression>, right: Box<Expression> },
+	Grouping(Box<Expression>),
 }
 
 impl Expression {
@@ -55,7 +55,11 @@ impl Expression {
 	}
 
 	pub fn get(instance: Box<Self>, property: Token) -> Box<Self> {
-		Box::new(Expression::Get { instance, property })
+		Box::new(Expression::PropertyGet { instance, property })
+	}
+
+	pub fn set(instance: Box<Self>, property: Token, value: Box<Self>) -> Box<Self> {
+		Box::new(Expression::PropertySet { instance, property, value })
 	}
 }
 
@@ -106,8 +110,8 @@ impl std::fmt::Display for Expression {
 				"(call {callee} ({}) )",
 				arguments.iter().map(|arg| format!("{arg}")).collect::<Vec<String>>().join(" ")
 			),
-			Get { instance, property } => write!(f, "(get {instance}.{})", property.lexeme),
-			Set { instance, property, value } => write!(f, "(set {instance}.{}={value})", property.lexeme),
+			PropertyGet { instance, property } => write!(f, "(get {instance}.{})", property.lexeme),
+			PropertySet { instance, property, value } => write!(f, "(set {instance}.{}={value})", property.lexeme),
 		}
 	}
 }

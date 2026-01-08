@@ -17,6 +17,10 @@ impl InstanceValue {
 	pub fn get(&self, property: &Token) -> Result<RcCell<Value>, InterpreterError> {
 		self.fields.get(property.lexeme).cloned().ok_or(InterpreterError::UndefinedProperty(property.lexeme))
 	}
+
+	pub fn set(&mut self, property: &Token, value: RcCell<Value>) {
+		self.fields.insert(property.lexeme, value);
+	}
 }
 
 impl Display for InstanceValue {

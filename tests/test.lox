@@ -176,6 +176,8 @@ print DevonshireCream; // Prints "DevonshireCream".
 
 var cream = DevonshireCream();
 print cream;
+cream.a = "set property to cream";
+print "get property from cream: " + cream.a;
 
 fun testfn(n){
     print n;

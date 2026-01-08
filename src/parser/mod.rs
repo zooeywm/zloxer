@@ -11,54 +11,66 @@
 //! Keywords: `CFG`(context-free grammar), `BNF`(Backus-Naur Form),
 //! `EBNF`(Extended Backus-Naur Form)
 //!
-//! |Name|Operators|Associates
-//! --|--|--
-//! Comma|,|Left
-//! Ternary|?:|Right
-//! Equality|== !=|Left
-//! Comparison|< > <= >=|Left
-//! Term|+ -|Left
-//! Factor|* /|Left
-//! Unary|! -|Right
+//! This grammar is written in EBNF-style and intended for a hand-written
+//! recursive-descent parser. Some semantic constraints are enforced during AST
+//! construction rather than in the grammar itself.
 //!
 //! Lox Expression grammar:
 //!
-//! ``` BNF
+//! ``` BNF pseudocode
 //! program        -> declaration* Eof
+//!
 //! declaration    -> class_decl | fun_decl | var_decl | statement
+//!
 //! class_decl     -> "class" Identifier "{" function* "}"
-//! statement      -> print | return | block | break | if | while | for | expr_stmt
+//!
 //! fun_decl       -> "fun" function
 //! function       -> Identifier "(" parameters? ")" block
 //! parameters     -> Identifier ("," Identifier)*
-//! expr_stmt      -> expression ";"
+//!
+//! statement      -> print | if | while | for | expr_stmt | block | break | return
+//!
 //! print          -> "print" expression ";"
-//! return         -> "return" expression? ";"
-//! block          -> "{" declaration* "}"
-//! break          -> "break" ";"
+//!
 //! if             -> "if" "(" expression ")" statement ("else" statement)?
 //! while          -> "while" "(" expression ")" statement
 //! for            -> "for" "(" (var_decl | expr_stmt | ";")
 //!                     expression? ";" expression? ")" statement
+//!
+//! expr_stmt      -> expression ";"
+//! block          -> "{" declaration* "}"
+//! break          -> "break" ";"
+//! return         -> "return" expression? ";"
+//!
 //! var_decl       -> "var" Identifier ("=" expression)? ";"
+//!
 //! expression     -> comma
 //! comma          -> assignment ("," assignment)*
-//! // `call` here represents a potential l-value, validated during AST construction
-//! assignment     -> call "=" assignment | ternary
+//!
+//! # assignment is right-associative
+//! # l-value is validated during AST construction
+//! assignment     -> ternary ("=" assignment)?
+//!
 //! ternary        -> logic_or ("?" expression ":" ternary)?
+//!
 //! logic_or       -> logid_and ("or" logic_and)*
 //! logid_and      -> equality ("and" equality)*
+//!
 //! equality       -> comparison (("!=" | "==") comparison)*
 //! comparison     -> term ((">" | ">=" | "<" | "<=") term)*
-//! term           -> factor (("-" | "+") factor)*
-//! factor         -> unary (("/" | "*") unary)*
+//!
+//! term           -> factor (("+" | "-") factor)*
+//! factor         -> unary (("*" | "/") unary)*
+//!
 //! unary          -> ("!" | "-") unary | call
+//!
 //! call           -> primary (function_call | get_call)*
 //! function_call  -> "(" arguments? ")"
 //! get_call       -> "." Identifier
-//! // Use assignment instead of expression to avoid parsing comma expressions in arguments
+//! # Use assignment instead of expression to avoid parsing comma expressions in arguments
 //! arguments      -> assignment ( "," assignment )*
-//! primary        -> NUMBER | String | True | False | Nil | "(" expression ")" | Identifier
+//!
+//! primary        -> NUMBER | String | True | False | Nil | Identifier | "(" expression ")"
 //! ```
 
 pub(crate) mod expression;
@@ -84,7 +96,21 @@ impl Parser {
 		Self { tokens: tokens.into_iter().peekable(), error_count: 0, current_line: 0 }
 	}
 
-	/// program -> declaration* Eof
+	#[allow(unused)]
+	pub fn parse_expression(mut self) -> Result<Expression, LoxError> {
+		match self.expression() {
+			Ok(expr) => {
+				if self.error_count > 0 {
+					Err(LoxError::ParserErrors(self.error_count))
+				} else {
+					Ok(*expr)
+				}
+			}
+			Err(ParserError::InternalError(e)) => Err(e.into()),
+			Err(ParserError::ParseError(_)) => Err(LoxError::ParserErrors(self.error_count)),
+		}
+	}
+
 	pub fn program(mut self) -> Result<Vec<Statement>, LoxError> {
 		let mut statements = Vec::new();
 		while let Ok(token) = self.peek() {
@@ -103,7 +129,6 @@ impl Parser {
 		if self.error_count > 0 { Err(LoxError::ParserErrors(self.error_count)) } else { Ok(statements) }
 	}
 
-	/// declaration -> class_decl | fun_decl | var_decl | statement
 	#[inline]
 	fn declaration(&mut self) -> Result<Statement, ParserError> {
 		match self.peek()?.r#type {
@@ -114,7 +139,6 @@ impl Parser {
 		}
 	}
 
-	/// class_decl -> "class" Identifier "{" function* "}"
 	#[inline]
 	fn class_decl(&mut self) -> Result<Statement, ParserError> {
 		self.current_line = self.peek()?.line;
@@ -134,26 +158,6 @@ impl Parser {
 		Ok(Statement::ClassDecl { name_token, methods })
 	}
 
-	/// statement -> print | return | block | break | if | while | for | expr_stmt
-	#[inline]
-	fn statement(&mut self) -> Result<Statement, ParserError> {
-		use TokenType::*;
-
-		self.current_line = self.peek()?.line;
-
-		match &self.peek()?.r#type {
-			Print => self.print(),
-			Return => self.r#return(),
-			LeftBrace => self.block(),
-			Break => self.r#break(),
-			If => self.r#if(),
-			While => self.r#while(),
-			For => self.r#for(),
-			_ => self.expr_stmt(),
-		}
-	}
-
-	/// fun_decl -> "fun" function
 	#[inline]
 	fn fun_decl(&mut self) -> Result<Statement, ParserError> {
 		self.current_line = self.peek()?.line;
@@ -161,7 +165,6 @@ impl Parser {
 		self.function().map(Statement::FunDecl)
 	}
 
-	/// function -> Identifier "(" parameters? ")" block
 	#[inline]
 	fn function(&mut self) -> Result<Function, ParserError> {
 		let next = self.peek()?;
@@ -181,7 +184,6 @@ impl Parser {
 		Ok(Function { name_token, parameters, body: Rc::new(body_statements) })
 	}
 
-	/// parameters -> Identifier ("," Identifier)*
 	#[inline]
 	fn parameters(&mut self, line: usize) -> Result<Vec<Token>, ParserError> {
 		let mut parameters = Vec::new();
@@ -207,15 +209,24 @@ impl Parser {
 		Ok(parameters)
 	}
 
-	/// expr_stmt -> expression ";"
 	#[inline]
-	fn expr_stmt(&mut self) -> Result<Statement, ParserError> {
-		let expr = *self.expression()?;
-		self.consume(Semicolon)?;
-		Ok(Statement::Expression(expr))
+	fn statement(&mut self) -> Result<Statement, ParserError> {
+		use TokenType::*;
+
+		self.current_line = self.peek()?.line;
+
+		match &self.peek()?.r#type {
+			Print => self.print(),
+			Return => self.r#return(),
+			LeftBrace => self.block(),
+			Break => self.r#break(),
+			If => self.r#if(),
+			While => self.r#while(),
+			For => self.r#for(),
+			_ => self.expr_stmt(),
+		}
 	}
 
-	/// print -> "print" expression ";"
 	#[inline]
 	fn print(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "print"
@@ -224,36 +235,6 @@ impl Parser {
 		Ok(Statement::Print(expr))
 	}
 
-	/// return -> "return" expression? ";"
-	#[inline]
-	fn r#return(&mut self) -> Result<Statement, ParserError> {
-		self.advance()?; // consume "return"
-		let value = (!self.check(&Semicolon)?).then(|| self.expression()).transpose()?;
-		self.consume(Semicolon)?;
-		Ok(Statement::Return(value))
-	}
-
-	/// block -> "{" declaration* "}"
-	#[inline]
-	fn block(&mut self) -> Result<Statement, ParserError> {
-		self.advance()?; // consume '{'
-		let mut statements = Vec::new();
-		while !self.check(&RightBrace)? {
-			statements.push(self.declaration()?);
-		}
-		self.consume(RightBrace)?;
-		Ok(Statement::Block(statements))
-	}
-
-	/// break -> "break" ";"
-	#[inline]
-	fn r#break(&mut self) -> Result<Statement, ParserError> {
-		self.advance()?; // consume "break"
-		self.consume(Semicolon)?;
-		Ok(Statement::Break)
-	}
-
-	/// if -> "if" "(" expression ")" statement ("else" statement)?
 	#[inline]
 	fn r#if(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "if"
@@ -273,7 +254,6 @@ impl Parser {
 		Ok(Statement::If { condition, then_branch, else_branch })
 	}
 
-	/// while -> "while" "(" expression ")" statement
 	#[inline]
 	fn r#while(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "while"
@@ -284,8 +264,6 @@ impl Parser {
 		Ok(Statement::While { condition, body })
 	}
 
-	/// for -> "for" "(" (var_decl | expr_stmt | ";")
-	///          expression? ";" expression? ")" statement
 	#[inline]
 	fn r#for(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "for"
@@ -321,7 +299,39 @@ impl Parser {
 		Ok(body)
 	}
 
-	/// var_decl -> "var" Identifier ("=" expression)? ";"
+	#[inline]
+	fn expr_stmt(&mut self) -> Result<Statement, ParserError> {
+		let expr = *self.expression()?;
+		self.consume(Semicolon)?;
+		Ok(Statement::Expression(expr))
+	}
+
+	#[inline]
+	fn block(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume '{'
+		let mut statements = Vec::new();
+		while !self.check(&RightBrace)? {
+			statements.push(self.declaration()?);
+		}
+		self.consume(RightBrace)?;
+		Ok(Statement::Block(statements))
+	}
+
+	#[inline]
+	fn r#break(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "break"
+		self.consume(Semicolon)?;
+		Ok(Statement::Break)
+	}
+
+	#[inline]
+	fn r#return(&mut self) -> Result<Statement, ParserError> {
+		self.advance()?; // consume "return"
+		let value = (!self.check(&Semicolon)?).then(|| self.expression()).transpose()?;
+		self.consume(Semicolon)?;
+		Ok(Statement::Return(value))
+	}
+
 	#[inline]
 	fn var_decl(&mut self) -> Result<Statement, ParserError> {
 		self.current_line = self.peek()?.line;
@@ -343,11 +353,9 @@ impl Parser {
 		Ok(Statement::VarDeclaration { name_token, initializer })
 	}
 
-	/// expression -> comma
 	#[inline]
 	fn expression(&mut self) -> Result<Box<Expression>, ParserError> { self.comma() }
 
-	/// comma -> assignment ("," assignment)*
 	#[inline]
 	fn comma(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expr = self.assignment()?;
@@ -359,27 +367,29 @@ impl Parser {
 		Ok(expr)
 	}
 
-	/// `call` here represents a potential l-value, validated during AST
-	/// construction
-	/// assignment -> call "=" assignment | ternary
 	#[inline]
 	fn assignment(&mut self) -> Result<Box<Expression>, ParserError> {
 		let expr = self.ternary()?;
 
 		if self.check(&Equal)? {
 			self.advance()?; // consume '='
-			if let Expression::Variable(name_token) = *expr {
-				let value = self.assignment()?;
-				return Ok(Expression::assign(name_token, value));
-			} else {
-				return Err(ParseError::new(self.current_line, ParseErrorType::InvalidAssignmentTarget).into());
+			let value = self.assignment()?;
+			match *expr {
+				Expression::Variable(name_token) => {
+					return Ok(Expression::assign(name_token, value));
+				}
+				Expression::PropertyGet { instance, property } => {
+					return Ok(Expression::set(instance, property, value));
+				}
+				_ => {
+					return Err(ParseError::new(self.current_line, ParseErrorType::InvalidAssignmentTarget).into());
+				}
 			}
 		}
 
 		Ok(expr)
 	}
 
-	/// ternary -> logic_or ("?" expression ":" ternary)?
 	#[inline]
 	fn ternary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let condition = self.logic_or()?;
@@ -394,7 +404,6 @@ impl Parser {
 		Ok(condition)
 	}
 
-	/// logic_or -> logic_and ("or" logic_and)*
 	#[inline]
 	fn logic_or(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.logic_and()?;
@@ -404,7 +413,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	/// logic_and -> equality ("and" equality)*
 	#[inline]
 	fn logic_and(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.equality()?;
@@ -414,7 +422,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	/// equality -> comparison (("!=" | "==") comparison)*
 	#[inline]
 	fn equality(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.comparison()?;
@@ -424,7 +431,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	/// comparison -> term ((">" | ">=" | "<" | "<=") term)*
 	#[inline]
 	fn comparison(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.term()?;
@@ -434,7 +440,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	/// term -> factor (("-" | "+") factor)*
 	#[inline]
 	fn term(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.factor()?;
@@ -444,7 +449,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	/// factor -> unary (("/" | "*") unary)*
 	#[inline]
 	fn factor(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.unary()?;
@@ -454,7 +458,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	/// unary -> ("!" | "-") unary | call
 	#[inline]
 	fn unary(&mut self) -> Result<Box<Expression>, ParserError> {
 		if matches!(self.peek()?.r#type, Bang | Minus) {
@@ -463,7 +466,6 @@ impl Parser {
 		self.call()
 	}
 
-	/// call -> primary (function_call | get_call)*
 	#[inline]
 	fn call(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expr = self.primary()?;
@@ -479,7 +481,6 @@ impl Parser {
 		Ok(expr)
 	}
 
-	/// function_call -> "(" arguments? ")"
 	#[inline]
 	fn function_call(&mut self, expr: Box<Expression>) -> Result<Box<Expression>, ParserError> {
 		self.advance()?; // consume '('
@@ -503,7 +504,6 @@ impl Parser {
 		Ok(Expression::call(expr, self.current_line, arguments))
 	}
 
-	/// get_call -> "." Identifier
 	#[inline]
 	fn get_call(&mut self, expr: Box<Expression>) -> Result<Box<Expression>, ParserError> {
 		self.advance()?; // consume dot
@@ -515,23 +515,6 @@ impl Parser {
 		Ok(Expression::get(expr, property))
 	}
 
-	#[allow(unused)]
-	/// Parse the tokens into an expression.
-	pub fn parse_expression(mut self) -> Result<Expression, LoxError> {
-		match self.expression() {
-			Ok(expr) => {
-				if self.error_count > 0 {
-					Err(LoxError::ParserErrors(self.error_count))
-				} else {
-					Ok(*expr)
-				}
-			}
-			Err(ParserError::InternalError(e)) => Err(e.into()),
-			Err(ParserError::ParseError(_)) => Err(LoxError::ParserErrors(self.error_count)),
-		}
-	}
-
-	/// Parse primary expressions.
 	#[inline]
 	fn primary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let token = self.peek()?;

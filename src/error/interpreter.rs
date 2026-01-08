@@ -24,8 +24,10 @@ pub enum InterpreterError {
 	#[error("")]
 	#[allow(private_interfaces)]
 	Return(RcCell<Value>),
-	#[error("Only Instances have proterties.")]
+	#[error("Cannot get property from non-instance")]
 	GetPropertyError,
+	#[error("Cannot set property to non-instance")]
+	SetPropertyError,
 	#[error("Undefined property: {0}")]
 	UndefinedProperty(&'static str),
 	#[error("{0}")]
