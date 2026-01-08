@@ -30,6 +30,8 @@ pub enum InterpreterError {
 	SetPropertyError,
 	#[error("Undefined property: {0}")]
 	UndefinedProperty(&'static str),
+	#[error("Cannot use this out of class")]
+	WrongUseOfThis,
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

@@ -210,3 +210,44 @@ var baba=Bacon();
 
 baba.eat();
 Bacon().eat();
+
+var tt=1;
+class Thing {
+  getCallback() {
+    tt=2;
+    fun localFunction() {
+      print tt;
+    }
+    tt=3;
+
+    return localFunction;
+  }
+}
+
+var callback = Thing().getCallback();
+callback();
+print tt;
+
+class Thing {
+  getCallback() {
+    fun localFunction() {
+      print this;
+    }
+
+    return localFunction;
+  }
+}
+
+var callback = Thing().getCallback();
+callback();
+
+class Cake {
+  taste() {
+    var adjective = "delicious";
+    print "The " + this.flavor + " cake is " + adjective + "!";
+  }
+}
+
+var cake = Cake();
+cake.flavor = "German chocolate";
+cake.taste(); // Prints "The German chocolate cake is delicious!".

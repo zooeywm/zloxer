@@ -530,6 +530,10 @@ impl Parser {
 
 				Ok(Expression::grouping(expr))
 			}
+			This => {
+				self.advance()?; // consume "this"
+				Ok(Box::new(Expression::This))
+			}
 			_ => {
 				let err_string = token.lexeme.to_string();
 				Err(ParseError::new(self.current_line, ParseErrorType::UnexpectedToken(err_string)).into())

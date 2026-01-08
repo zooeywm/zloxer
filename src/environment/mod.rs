@@ -25,21 +25,21 @@ impl Environment {
 
 	/// A variable statement doesn’t just define a new variable, it can also be
 	/// used to redefine an existing variable.
-	pub fn define(&mut self, token: &Token, value: RcCell<Value>) {
-		self.variables.insert(token.lexeme, value);
+	pub fn define(&mut self, token_name: &'static str, value: RcCell<Value>) {
+		self.variables.insert(token_name, value);
 	}
 
 	pub fn define_native(&mut self, name: &'static str, value: Value) {
 		self.variables.insert(name, RcCell::new(value));
 	}
 
-	pub fn get(&self, token: &Token) -> Option<RcCell<Value>> {
+	pub fn get(&self, token_name: &'static str) -> Option<RcCell<Value>> {
 		self
 			.variables
-			.get(token.lexeme)
+			.get(token_name)
 			.cloned()
-			.or_else(|| self.closure.as_ref().and_then(|env| env.borrow().get(token)))
-			.or_else(|| self.outer.as_ref().and_then(|env| env.get(token)))
+			.or_else(|| self.closure.as_ref().and_then(|env| env.borrow().get(token_name)))
+			.or_else(|| self.outer.as_ref().and_then(|env| env.get(token_name)))
 	}
 
 	/// Assign a value to an existing variable.

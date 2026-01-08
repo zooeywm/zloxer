@@ -26,7 +26,8 @@ use crate::{LoxError, environment::Environment, error::interpreter::InterpreterE
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter {
-	environment: Box<Environment>,
+	environment:      Box<Environment>,
+	current_instance: Option<RcCell<Value>>,
 }
 
 impl Interpreter {
@@ -40,7 +41,7 @@ impl Interpreter {
 		});
 		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure, RcCell::default());
 		environment.define_native("clock", Value::Callable(callable_value));
-		Self { environment: Box::new(environment) }
+		Self { environment: Box::new(environment), current_instance: None }
 	}
 
 	pub fn interpret_statements(&mut self, statements: &[Statement]) -> Result<(), InterpreterError> {
@@ -66,7 +67,7 @@ impl Interpreter {
 				} else {
 					RcCell::new(Value::Nil)
 				};
-				self.environment.define(name_token, value);
+				self.environment.define(name_token.lexeme, value);
 			}
 			Statement::Block(statements) => {
 				self.interpret_block(statements, Environment::new())?;
@@ -102,7 +103,7 @@ impl Interpreter {
 					RcCell::new((*self.environment).clone()),
 				);
 				let value = Value::Callable(callable);
-				self.environment.define(name_token, RcCell::new(value));
+				self.environment.define(name_token.lexeme, RcCell::new(value));
 			}
 			Statement::Return(expression) => {
 				let value = if let Some(expression) = expression {
@@ -126,7 +127,7 @@ impl Interpreter {
 					})
 					.collect();
 				let class = RcCell::new(ClassValue::new(name_token.lexeme, methods));
-				self.environment.define(name_token, RcCell::new(Value::Class(class)));
+				self.environment.define(name_token.lexeme, RcCell::new(Value::Class(class)));
 			}
 		}
 		Ok(())
@@ -206,7 +207,7 @@ impl Interpreter {
 					self.evaluate(else_branch)?
 				}
 			}
-			Variable(token) => self.environment.get(token).ok_or_else(|| {
+			Variable(token) => self.environment.get(token.lexeme).ok_or_else(|| {
 				InterpreterError::UndefinedVariable(format!("line {}: '{}'", token.line, token.lexeme))
 			})?,
 			Assign { target, value } => {
@@ -249,11 +250,10 @@ impl Interpreter {
 				self.call(callee_value, *line, &arg_values)?
 			}
 			PropertyGet { instance, property } => {
-				let instance = self.evaluate(instance)?;
-				if let Value::Instance(instance) = &*instance.borrow() {
-					return instance.get(property);
-				}
-				return Err(InterpreterError::GetPropertyError);
+				let instance_value = self.evaluate(instance)?;
+				let value = InstanceValue::get(instance_value, property);
+				self.current_instance.take();
+				return value;
 			}
 			PropertySet { instance, property, value } => {
 				let instance = self.evaluate(instance)?;
@@ -266,6 +266,9 @@ impl Interpreter {
 					}
 					_ => return Err(InterpreterError::SetPropertyError),
 				}
+			}
+			Expression::This => {
+				self.current_instance.as_ref().ok_or_else(|| InterpreterError::WrongUseOfThis)?.clone()
 			}
 		})
 	}
@@ -289,17 +292,23 @@ impl Interpreter {
 				Ok(match body {
 					CallableType::Native(func) => RcCell::new(func(args)),
 					CallableType::Lox(statements) => {
-						// println!("closure: {closure:?}");
+						// If is instance method call, record the instance
+						if let Some(instance_value) = closure.borrow().get("this") {
+							self.current_instance.replace(instance_value.clone());
+						}
+
 						let mut environment = Environment::new().set_closure(closure.clone());
 						// Define function parameters in the new environment
 						for (i, parameter) in parameters.iter().enumerate() {
-							environment.define(parameter, args[i].clone());
+							environment.define(parameter.lexeme, args[i].clone());
 						}
-						match self.interpret_block(statements, environment) {
-							Ok(_) => RcCell::new(Value::Nil),
-							Err(InterpreterError::Return(value)) => value,
-							Err(e) => return Err(e),
-						}
+						let ret = match self.interpret_block(statements, environment) {
+							Ok(_) => Ok(RcCell::new(Value::Nil)),
+							Err(InterpreterError::Return(value)) => Ok(value),
+							Err(e) => Err(e),
+						};
+						self.current_instance.take();
+						ret?
 					}
 				})
 			}
