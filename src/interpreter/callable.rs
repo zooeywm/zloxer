@@ -2,9 +2,9 @@ use std::{fmt::Debug, rc::Rc};
 
 use crate::{environment::Environment, interpreter::value::Value, scanner::Token, statement::Statement, utils::RcCell};
 
-type NativeFunction = Box<dyn Fn(&[RcCell<Value>]) -> Value>;
+type NativeFunction = Rc<dyn Fn(&[RcCell<Value>]) -> Value>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct CallableValue {
 	pub name:       &'static str,
 	pub parameters: Rc<Vec<Token>>,
@@ -12,6 +12,7 @@ pub(crate) struct CallableValue {
 	pub closure:    RcCell<Environment>,
 }
 
+#[derive(Clone)]
 pub(crate) enum CallableType {
 	Native(NativeFunction),
 	Lox(Rc<Vec<Statement>>),

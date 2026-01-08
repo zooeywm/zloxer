@@ -178,6 +178,7 @@ var cream = DevonshireCream();
 print cream;
 cream.a = "set property to cream";
 print "get property from cream: " + cream.a;
+print cream.serveOn();
 
 fun testfn(n){
     print n;
@@ -189,3 +190,23 @@ print test;
 
 var x = 1 > 2 ? 3 : 10;
 print x;
+
+class Box {}
+
+fun notMethod(argument) {
+  print "called function with " + argument;
+}
+
+var box = Box();
+box.function = notMethod;
+box.function("argument");
+
+class Bacon {
+  eat() {
+    print "Crunch crunch crunch!";
+  }
+}
+var baba=Bacon();
+
+baba.eat();
+Bacon().eat();

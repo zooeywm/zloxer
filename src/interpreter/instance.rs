@@ -15,7 +15,19 @@ impl InstanceValue {
 	pub fn new(class: RcCell<ClassValue>) -> Self { Self { class, fields: HashMap::new() } }
 
 	pub fn get(&self, property: &Token) -> Result<RcCell<Value>, InterpreterError> {
-		self.fields.get(property.lexeme).cloned().ok_or(InterpreterError::UndefinedProperty(property.lexeme))
+		self
+			.fields
+			.get(property.lexeme)
+			.cloned()
+			.or_else(|| {
+				self
+					.class
+					.borrow()
+					.methods
+					.get(property.lexeme)
+					.map(|method| RcCell::new(Value::Callable(method.clone())))
+			})
+			.ok_or(InterpreterError::UndefinedProperty(property.lexeme))
 	}
 
 	pub fn set(&mut self, property: &Token, value: RcCell<Value>) {

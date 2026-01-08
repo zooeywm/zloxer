@@ -17,7 +17,7 @@ pub(crate) mod class;
 pub(crate) mod instance;
 pub(crate) mod value;
 
-use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
+use std::{collections::HashMap, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
@@ -33,7 +33,7 @@ impl Interpreter {
 	pub fn new() -> Self {
 		// Define the "clock" native function
 		let mut environment = Environment::new();
-		let closure = Box::new(|_args: &[RcCell<Value>]| {
+		let closure = Rc::new(|_args: &[RcCell<Value>]| {
 			println!("Native function 'clock' called.");
 			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
 			Value::Number(now.as_secs_f64())
@@ -112,8 +112,20 @@ impl Interpreter {
 				};
 				return Err(InterpreterError::Return(value));
 			}
-			Statement::ClassDecl { name_token, methods } => {
-				let class = RcCell::new(ClassValue::new(name_token.lexeme));
+			Statement::ClassDeclaration { name_token, methods } => {
+				let methods: HashMap<&'static str, CallableValue> = methods
+					.iter()
+					.map(|Function { name_token, parameters, body }| {
+						let callable = CallableValue::new_lox(
+							name_token.lexeme,
+							parameters.clone(),
+							body.clone(),
+							RcCell::new((*self.environment).clone()),
+						);
+						(name_token.lexeme, callable)
+					})
+					.collect();
+				let class = RcCell::new(ClassValue::new(name_token.lexeme, methods));
 				self.environment.define(name_token, RcCell::new(Value::Class(class)));
 			}
 		}

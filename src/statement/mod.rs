@@ -27,7 +27,7 @@ pub enum Statement {
 	Return(Option<Box<Expression>>),
 	/// A block of statements.
 	Block(Vec<Statement>),
-	ClassDecl {
+	ClassDeclaration {
 		name_token: Token,
 		methods:    Vec<Function>,
 	},
@@ -48,6 +48,7 @@ pub struct Function {
 	pub parameters: Rc<Vec<Token>>,
 	pub body:       Rc<Vec<Statement>>,
 }
+
 #[cfg(test)]
 mod tests {
 	use crate::scanner::Scanner;

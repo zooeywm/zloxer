@@ -155,7 +155,7 @@ impl Parser {
 		}
 
 		self.consume(RightBrace)?;
-		Ok(Statement::ClassDecl { name_token, methods })
+		Ok(Statement::ClassDeclaration { name_token, methods })
 	}
 
 	#[inline]
