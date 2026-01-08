@@ -20,6 +20,7 @@ pub(crate) enum Expression {
 	PropertyGet { instance: Box<Expression>, property: Token },
 	PropertySet { instance: Box<Expression>, property: Token, value: Box<Expression> },
 	This,
+	Super,
 	Assign { target: Token, value: Box<Expression> },
 	Ternary { condition: Box<Expression>, then_branch: Box<Expression>, else_branch: Box<Expression> },
 	Comma { left: Box<Expression>, right: Box<Expression> },
@@ -114,6 +115,7 @@ impl std::fmt::Display for Expression {
 			PropertyGet { instance, property } => write!(f, "(get {instance}.{})", property.lexeme),
 			PropertySet { instance, property, value } => write!(f, "(set {instance}.{}={value})", property.lexeme),
 			This => write!(f, "this"),
+			Super => write!(f, "super"),
 		}
 	}
 }

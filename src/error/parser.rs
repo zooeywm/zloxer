@@ -52,6 +52,8 @@ pub enum ParseErrorType {
 	ExpectPropertyName,
 	/// Error for missing class name in class define.
 	ExpectClassName,
+	/// Error for missing super class name in class define.
+	ExpectSuperClassName,
 	/// Error for missing function name in function_call.
 	ExpectFunctionNameOnCall,
 }
@@ -73,6 +75,7 @@ impl std::fmt::Display for ParseErrorType {
 			TooManyParameters => write!(f, "Cannot have more than 255 parameters."),
 			ExpectPropertyName => write!(f, "Expect property name after '.'."),
 			ExpectClassName => write!(f, "Expect class name."),
+			ExpectSuperClassName => write!(f, "Expect superclass name."),
 			ExpectFunctionNameOnCall => write!(f, "Expect function name."),
 		}
 	}

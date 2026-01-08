@@ -16,19 +16,28 @@ impl InstanceValue {
 
 	pub fn get(this: RcCell<Value>, property: &Token) -> Result<RcCell<Value>, InterpreterError> {
 		if let Value::Instance(instance) = &*this.borrow() {
+			// The Callable value in Value form
 			let value = instance
 				.fields
 				.get(property.lexeme)
 				.cloned()
-				.or_else(|| instance.class.borrow().methods.get(property.lexeme).cloned())
+				.or_else(|| instance.class.borrow().find_method(property.lexeme))
 				.ok_or(InterpreterError::UndefinedProperty(property.lexeme))?;
-			Ok(match &mut *value.clone().borrow_mut() {
-				Value::Callable(CallableValue { closure, .. }) => {
-					closure.borrow_mut().define("this", this.clone());
-					value
+
+			if let Value::Callable(CallableValue { closure, .. }) = &*value.clone().borrow() {
+				let mut closure = closure.borrow_mut();
+				// If the value is callable, it is a value,
+				// we add the instance itself to the method closure.
+				closure.define("this", this.clone());
+
+				if let Some(superclass) = &instance.class.borrow().superclass {
+					// Also, if the class of this instance has superclass, we define the
+					// superclass in the closure so that `super` keyword can be used.
+					closure.define("super", superclass.clone());
 				}
-				_ => value,
-			})
+			}
+
+			Ok(value)
 		} else {
 			Err(InterpreterError::GetPropertyError)
 		}

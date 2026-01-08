@@ -29,6 +29,7 @@ pub enum Statement {
 	Block(Vec<Statement>),
 	ClassDeclaration {
 		name_token: Token,
+		superclass: Option<Token>,
 		methods:    Vec<Function>,
 	},
 	/// A variable declaration statement.

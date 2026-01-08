@@ -22,7 +22,7 @@
 //!
 //! declaration    -> class_decl | fun_decl | var_decl | statement
 //!
-//! class_decl     -> "class" Identifier "{" function* "}"
+//! class_decl     -> "class" Identifier ("<" Identifier)? "{" function* "}"
 //!
 //! fun_decl       -> "fun" function
 //! function       -> Identifier "(" parameters? ")" block
@@ -70,7 +70,7 @@
 //! # Use assignment instead of expression to avoid parsing comma expressions in arguments
 //! arguments      -> assignment ( "," assignment )*
 //!
-//! primary        -> NUMBER | String | True | False | Nil | Identifier | "(" expression ")"
+//! primary        -> Number | String | True | False | Nil | Identifier | This | Super | "(" expression ")"
 //! ```
 
 pub(crate) mod expression;
@@ -148,6 +148,16 @@ impl Parser {
 			return Err(ParseError::new(self.current_line, ParseErrorType::ExpectClassName).into());
 		}
 		let name_token = self.advance()?; // class name
+
+		let mut superclass = None;
+		if self.check(&Less)? {
+			self.advance()?; // consume '<'
+			if !matches!(self.peek()?.r#type, Identifier(_)) {
+				return Err(ParseError::new(self.current_line, ParseErrorType::ExpectSuperClassName).into());
+			}
+			superclass = Some(self.advance()?) // superclass name
+		}
+
 		self.consume(LeftBrace)?;
 		let mut methods = vec![];
 		while !self.check(&TokenType::RightBrace)? {
@@ -155,7 +165,7 @@ impl Parser {
 		}
 
 		self.consume(RightBrace)?;
-		Ok(Statement::ClassDeclaration { name_token, methods })
+		Ok(Statement::ClassDeclaration { name_token, superclass, methods })
 	}
 
 	#[inline]
@@ -533,6 +543,10 @@ impl Parser {
 			This => {
 				self.advance()?; // consume "this"
 				Ok(Box::new(Expression::This))
+			}
+			Super => {
+				self.advance()?; // consume "super"
+				Ok(Box::new(Expression::Super))
 			}
 			_ => {
 				let err_string = token.lexeme.to_string();

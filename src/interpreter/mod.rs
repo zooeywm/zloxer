@@ -26,9 +26,8 @@ use crate::{LoxError, environment::Environment, error::interpreter::InterpreterE
 
 /// Interpreter that evaluates Lox expressions.
 pub struct Interpreter {
-	environment:      Box<Environment>,
-	current_instance: Option<RcCell<Value>>,
-	is_initializer:   bool,
+	environment:    Box<Environment>,
+	is_initializer: bool,
 }
 
 impl Interpreter {
@@ -42,7 +41,7 @@ impl Interpreter {
 		});
 		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure, RcCell::default());
 		environment.define_native("clock", Value::Callable(callable_value));
-		Self { environment: Box::new(environment), current_instance: None, is_initializer: false }
+		Self { environment: Box::new(environment), is_initializer: false }
 	}
 
 	pub fn interpret_statements(&mut self, statements: &[Statement]) -> Result<(), InterpreterError> {
@@ -118,7 +117,7 @@ impl Interpreter {
 				};
 				return Err(InterpreterError::Return(value));
 			}
-			Statement::ClassDeclaration { name_token, methods } => {
+			Statement::ClassDeclaration { name_token, superclass, methods } => {
 				let methods = methods
 					.iter()
 					.filter_map(|Function { name_token, parameters, body }| {
@@ -135,8 +134,20 @@ impl Interpreter {
 						Some((name_token.lexeme, callable))
 					})
 					.collect();
-				let class = RcCell::new(ClassValue::new(name_token.lexeme, methods));
-				self.environment.define(name_token.lexeme, RcCell::new(Value::Class(class)));
+
+				let mut class = ClassValue::new(name_token.lexeme, methods);
+
+				if let Some(superclass) = superclass {
+					if superclass.lexeme.eq(name_token.lexeme) {
+						return Err(InterpreterError::CannotInheritSelf);
+					}
+					if let Some(superclass) = self.environment.get(superclass.lexeme) {
+						class.superclass = Some(superclass);
+					} else {
+						return Err(InterpreterError::SuperclassNotExist);
+					}
+				}
+				self.environment.define(name_token.lexeme, RcCell::new(Value::Class(RcCell::new(class))));
 			}
 		}
 		Ok(())
@@ -263,9 +274,15 @@ impl Interpreter {
 			}
 			PropertyGet { instance, property } => {
 				let instance_value = self.evaluate(instance)?;
-				let value = InstanceValue::get(instance_value, property);
-				self.current_instance.take();
-				return value;
+				let instance_value_clone = instance_value.clone();
+				match &*instance_value_clone.borrow() {
+					Value::Instance(_) => InstanceValue::get(instance_value, property)?,
+					Value::Class(class) => match class.borrow().find_method(property.lexeme) {
+						Some(method) => method,
+						None => return Err(InterpreterError::MethodNotFoundInSuperClass),
+					},
+					_ => return Err(InterpreterError::GetPropertyError),
+				}
 			}
 			PropertySet { instance, property, value } => {
 				let instance = self.evaluate(instance)?;
@@ -279,8 +296,9 @@ impl Interpreter {
 					_ => return Err(InterpreterError::SetPropertyError),
 				}
 			}
-			Expression::This => {
-				self.current_instance.as_ref().ok_or_else(|| InterpreterError::WrongUseOfThis)?.clone()
+			Expression::This => self.environment.get("this").ok_or_else(|| InterpreterError::WrongUseOfThis)?,
+			Expression::Super => {
+				self.environment.get("super").ok_or_else(|| InterpreterError::SuperclassNotExist)?
 			}
 		})
 	}
@@ -305,13 +323,12 @@ impl Interpreter {
 				Ok(match body {
 					CallableType::Native(func) => RcCell::new(func(args)),
 					CallableType::Lox(statements) => {
-						// If is instance method call, record the instance
-						if let Some(instance_value) = closure.borrow().get("this") {
-							// If we call init on an instance, return the instance directly
-							if name.eq(&"init") {
-								return Ok(instance_value);
-							}
-							self.current_instance.replace(instance_value.clone());
+						let local_statements = statements.clone();
+						// If we call init on an instance, return the instance directly
+						if name.eq(&"init")
+							&& let Some(instance_value) = closure.borrow().get("this")
+						{
+							return Ok(instance_value);
 						}
 
 						let mut environment = Environment::new().set_closure(closure.clone());
@@ -319,23 +336,24 @@ impl Interpreter {
 						for (i, parameter) in parameters.iter().enumerate() {
 							environment.define(parameter.lexeme, args[i].clone());
 						}
-						let ret = match self.interpret_block(statements, environment) {
+						let ret = match self.interpret_block(&local_statements, environment) {
 							Ok(_) => Ok(RcCell::new(Value::Nil)),
 							Err(InterpreterError::Return(value)) => Ok(value),
 							Err(e) => Err(e),
 						};
-						self.current_instance.take();
 						ret?
 					}
 				})
 			}
 			Value::Class(class) => {
 				let instance = RcCell::new(Value::Instance(InstanceValue::new(class.clone())));
-				if let Some(initializer) = class.borrow().methods.get("init") {
-					self.current_instance.replace(instance.clone());
+				if let Some(initializer) = class.borrow().find_method("init") {
+					if let Value::Callable(CallableValue { closure, .. }) = &*initializer.borrow() {
+						let mut closure = closure.borrow_mut();
+						closure.define("this", instance.clone());
+					}
 					self.is_initializer = true;
 					self.call(&initializer.borrow(), line, args)?;
-					self.current_instance.take();
 					self.is_initializer = false;
 				}
 				Ok(instance)

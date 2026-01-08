@@ -34,6 +34,16 @@ pub enum InterpreterError {
 	UndefinedProperty(&'static str),
 	#[error("Cannot use this out of class")]
 	WrongUseOfThis,
+	#[error("Cannot use super out of class")]
+	WrongUseOfSuper,
+	#[error("No superclass")]
+	NoSuperClass,
+	#[error("Class cannot inherit self")]
+	CannotInheritSelf,
+	#[error("Superclass not exists")]
+	SuperclassNotExist,
+	#[error("Method not found in super class")]
+	MethodNotFoundInSuperClass,
 	#[error("{0}")]
 	InternalError(#[from] anyhow::Error),
 }

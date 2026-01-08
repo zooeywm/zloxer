@@ -266,3 +266,36 @@ var foo = Foo(2);
 // there will be no method user can call named `init`
 // this will result in error.
 // foo.init(3);
+
+class Animal {
+  speak() {
+      print "I'm an animal";
+  }
+}
+
+class Cat < Animal {
+  speak() {
+      print "I'm a cat";
+  }
+}
+
+class Dog < Animal {
+}
+
+Cat().speak();
+Dog().speak();
+
+class Pastry {
+  cook(num) {
+    print "Bake at " + num + " degrees.";
+  }
+}
+
+class Eclair < Pastry {
+  cook(num) {
+    super.cook(num);
+    print "Pipe full of crème pâtissière.";
+  }
+}
+
+Eclair().cook(2);
