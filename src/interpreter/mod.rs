@@ -50,7 +50,6 @@ impl Interpreter {
 		Ok(())
 	}
 
-	#[inline]
 	fn interpret_statement(&mut self, statement: &Statement) -> Result<(), InterpreterError> {
 		match statement {
 			Statement::Expression(expression) => {
@@ -151,7 +150,6 @@ impl Interpreter {
 		Ok(())
 	}
 
-	#[inline]
 	fn interpret_block(
 		&mut self,
 		statements: &[Statement],
@@ -170,7 +168,6 @@ impl Interpreter {
 		result
 	}
 
-	#[inline]
 	fn interpret_block_with_closure(
 		&mut self,
 		statements: &[Statement],
@@ -186,7 +183,7 @@ impl Interpreter {
 	}
 
 	/// Interpret the given expression and print the result.
-	#[inline]
+
 	pub fn interpret_expression(&mut self, expr: Expression) -> Result<(), LoxError> {
 		let value = self.evaluate(&expr)?;
 		let value = value.borrow();
@@ -195,7 +192,7 @@ impl Interpreter {
 	}
 
 	/// Evaluate the given expression and return its value.
-	#[inline]
+
 	fn evaluate(&mut self, expr: &Expression) -> Result<RcCell<Value>, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => RcCell::new(match lit {
@@ -316,7 +313,6 @@ impl Interpreter {
 		})
 	}
 
-	#[inline]
 	fn call(
 		&mut self,
 		value: &Value,

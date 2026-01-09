@@ -129,7 +129,6 @@ impl Parser {
 		if self.error_count > 0 { Err(LoxError::ParserErrors(self.error_count)) } else { Ok(statements) }
 	}
 
-	#[inline]
 	fn declaration(&mut self) -> Result<Statement, ParserError> {
 		match self.peek()?.r#type {
 			TokenType::Class => self.class_decl(),
@@ -139,7 +138,6 @@ impl Parser {
 		}
 	}
 
-	#[inline]
 	fn class_decl(&mut self) -> Result<Statement, ParserError> {
 		self.current_line = self.peek()?.line;
 		self.advance()?; // consume "class"
@@ -168,14 +166,12 @@ impl Parser {
 		Ok(Statement::ClassDeclaration { name_token, superclass, methods })
 	}
 
-	#[inline]
 	fn fun_decl(&mut self) -> Result<Statement, ParserError> {
 		self.current_line = self.peek()?.line;
 		self.advance()?; // consume 'fun'
 		self.function().map(Statement::FunDecl)
 	}
 
-	#[inline]
 	fn function(&mut self) -> Result<Function, ParserError> {
 		let next = self.peek()?;
 		if !matches!(next.r#type, Identifier(_)) {
@@ -194,7 +190,6 @@ impl Parser {
 		Ok(Function { name_token, parameters, body: Rc::new(body_statements) })
 	}
 
-	#[inline]
 	fn parameters(&mut self, line: usize) -> Result<Vec<Token>, ParserError> {
 		let mut parameters = Vec::new();
 		if !self.check(&RightParen)? {
@@ -219,7 +214,6 @@ impl Parser {
 		Ok(parameters)
 	}
 
-	#[inline]
 	fn statement(&mut self) -> Result<Statement, ParserError> {
 		use TokenType::*;
 
@@ -237,7 +231,6 @@ impl Parser {
 		}
 	}
 
-	#[inline]
 	fn print(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "print"
 		let expr = *self.expression()?;
@@ -245,7 +238,6 @@ impl Parser {
 		Ok(Statement::Print(expr))
 	}
 
-	#[inline]
 	fn r#if(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "if"
 		self.consume(LeftParen)?;
@@ -264,7 +256,6 @@ impl Parser {
 		Ok(Statement::If { condition, then_branch, else_branch })
 	}
 
-	#[inline]
 	fn r#while(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "while"
 		self.consume(LeftParen)?;
@@ -274,7 +265,6 @@ impl Parser {
 		Ok(Statement::While { condition, body })
 	}
 
-	#[inline]
 	fn r#for(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "for"
 		self.consume(LeftParen)?; // consume '('
@@ -309,14 +299,12 @@ impl Parser {
 		Ok(body)
 	}
 
-	#[inline]
 	fn expr_stmt(&mut self) -> Result<Statement, ParserError> {
 		let expr = *self.expression()?;
 		self.consume(Semicolon)?;
 		Ok(Statement::Expression(expr))
 	}
 
-	#[inline]
 	fn block(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume '{'
 		let mut statements = Vec::new();
@@ -327,14 +315,12 @@ impl Parser {
 		Ok(Statement::Block(statements))
 	}
 
-	#[inline]
 	fn r#break(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "break"
 		self.consume(Semicolon)?;
 		Ok(Statement::Break)
 	}
 
-	#[inline]
 	fn r#return(&mut self) -> Result<Statement, ParserError> {
 		self.advance()?; // consume "return"
 		let value = (!self.check(&Semicolon)?).then(|| self.expression()).transpose()?;
@@ -342,7 +328,6 @@ impl Parser {
 		Ok(Statement::Return(value))
 	}
 
-	#[inline]
 	fn var_decl(&mut self) -> Result<Statement, ParserError> {
 		self.current_line = self.peek()?.line;
 		self.advance()?; // consume 'var'
@@ -363,10 +348,8 @@ impl Parser {
 		Ok(Statement::VarDeclaration { name_token, initializer })
 	}
 
-	#[inline]
 	fn expression(&mut self) -> Result<Box<Expression>, ParserError> { self.comma() }
 
-	#[inline]
 	fn comma(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expr = self.assignment()?;
 
@@ -377,7 +360,6 @@ impl Parser {
 		Ok(expr)
 	}
 
-	#[inline]
 	fn assignment(&mut self) -> Result<Box<Expression>, ParserError> {
 		let expr = self.ternary()?;
 
@@ -400,7 +382,6 @@ impl Parser {
 		Ok(expr)
 	}
 
-	#[inline]
 	fn ternary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let condition = self.logic_or()?;
 
@@ -414,7 +395,6 @@ impl Parser {
 		Ok(condition)
 	}
 
-	#[inline]
 	fn logic_or(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.logic_and()?;
 		while self.check(&Or)? {
@@ -423,7 +403,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	#[inline]
 	fn logic_and(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.equality()?;
 		while self.check(&And)? {
@@ -432,7 +411,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	#[inline]
 	fn equality(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.comparison()?;
 		while matches!(self.peek()?.r#type, BangEqual | EqualEqual) {
@@ -441,7 +419,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	#[inline]
 	fn comparison(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.term()?;
 		while matches!(self.peek()?.r#type, Greater | GreaterEqual | Less | LessEqual) {
@@ -450,7 +427,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	#[inline]
 	fn term(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.factor()?;
 		while matches!(self.peek()?.r#type, Minus | Plus) {
@@ -459,7 +435,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	#[inline]
 	fn factor(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expression = self.unary()?;
 		while matches!(self.peek()?.r#type, Slash | Star) {
@@ -468,7 +443,6 @@ impl Parser {
 		Ok(expression)
 	}
 
-	#[inline]
 	fn unary(&mut self) -> Result<Box<Expression>, ParserError> {
 		if matches!(self.peek()?.r#type, Bang | Minus) {
 			return Ok(Expression::unary(self.advance()?, self.unary()?));
@@ -476,7 +450,6 @@ impl Parser {
 		self.call()
 	}
 
-	#[inline]
 	fn call(&mut self) -> Result<Box<Expression>, ParserError> {
 		let mut expr = self.primary()?;
 
@@ -491,7 +464,6 @@ impl Parser {
 		Ok(expr)
 	}
 
-	#[inline]
 	fn function_call(&mut self, expr: Box<Expression>) -> Result<Box<Expression>, ParserError> {
 		self.advance()?; // consume '('
 		let mut arguments = Vec::new();
@@ -514,7 +486,6 @@ impl Parser {
 		Ok(Expression::call(expr, self.current_line, arguments))
 	}
 
-	#[inline]
 	fn get_call(&mut self, expr: Box<Expression>) -> Result<Box<Expression>, ParserError> {
 		self.advance()?; // consume dot
 
@@ -525,7 +496,6 @@ impl Parser {
 		Ok(Expression::get(expr, property))
 	}
 
-	#[inline]
 	fn primary(&mut self) -> Result<Box<Expression>, ParserError> {
 		let token = self.peek()?;
 		match &token.r#type {
@@ -556,15 +526,12 @@ impl Parser {
 	}
 
 	/// Advance to the next token.
-	#[inline]
 	fn advance(&mut self) -> anyhow::Result<Token> { self.tokens.next().with_context(|| "Unexpected EOF") }
 
 	/// Peek at the current token.
-	#[inline]
 	fn peek(&mut self) -> anyhow::Result<&Token> { self.tokens.peek().with_context(|| "Unexpected EOF") }
 
 	/// Synchronize the parser after an error.
-	#[inline]
 	fn synchronize(&mut self, error: &ParseError) -> anyhow::Result<()> {
 		self.error_count += 1;
 		eprintln!("{error}");
@@ -578,7 +545,6 @@ impl Parser {
 	}
 
 	/// Consume next token
-	#[inline]
 	fn consume(&mut self, ty: TokenType) -> Result<Token, ParserError> {
 		use ParseErrorType::*;
 		if !self.check(&ty)? {
@@ -597,7 +563,6 @@ impl Parser {
 	}
 
 	/// Check next token
-	#[inline]
 	fn check(&mut self, ty: &TokenType) -> Result<bool, ParserError> { Ok(&self.peek()?.r#type == ty) }
 }
 
