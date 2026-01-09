@@ -17,8 +17,6 @@ pub(crate) mod class;
 pub(crate) mod instance;
 pub(crate) mod value;
 
-use std::{rc::Rc, time::{SystemTime, UNIX_EPOCH}};
-
 use Expression::{Comma as CommaExpression, *};
 use value::Value;
 
@@ -32,15 +30,19 @@ pub struct Interpreter {
 
 impl Interpreter {
 	pub fn new() -> Self {
-		// Define the "clock" native function
 		let mut environment = Environment::new();
-		let closure = Rc::new(|_args: &[RcCell<Value>]| {
-			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-			Value::Number(now.as_secs_f64())
-		});
-		let callable_value = CallableValue::new_native("clock", Rc::new(vec![]), closure, RcCell::default());
-		environment.define_native("clock", Value::Callable(callable_value));
+		Self::register_native_functions(&mut environment);
 		Self { environment: Box::new(environment), is_initializer: false }
+	}
+
+	/// Register all native functions to the environment
+	fn register_native_functions(environment: &mut Environment) {
+		use callable::native;
+
+		for (name, func) in native::get_all_natives() {
+			let callable_value = CallableValue::from_native_function(name, func);
+			environment.define_native(name, Value::Callable(callable_value));
+		}
 	}
 
 	pub fn interpret_statements(&mut self, statements: &[Statement]) -> Result<(), InterpreterError> {
@@ -183,7 +185,6 @@ impl Interpreter {
 	}
 
 	/// Interpret the given expression and print the result.
-
 	pub fn interpret_expression(&mut self, expr: Expression) -> Result<(), LoxError> {
 		let value = self.evaluate(&expr)?;
 		let value = value.borrow();
@@ -192,7 +193,6 @@ impl Interpreter {
 	}
 
 	/// Evaluate the given expression and return its value.
-
 	fn evaluate(&mut self, expr: &Expression) -> Result<RcCell<Value>, InterpreterError> {
 		Ok(match expr {
 			Literal(lit) => RcCell::new(match lit {
