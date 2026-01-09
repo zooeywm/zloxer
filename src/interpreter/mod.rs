@@ -35,7 +35,6 @@ impl Interpreter {
 		// Define the "clock" native function
 		let mut environment = Environment::new();
 		let closure = Rc::new(|_args: &[RcCell<Value>]| {
-			println!("Native function 'clock' called.");
 			let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
 			Value::Number(now.as_secs_f64())
 		});
@@ -96,15 +95,14 @@ impl Interpreter {
 				return Err(InterpreterError::Break);
 			}
 			Statement::FunDecl(Function { name_token, parameters, body }) => {
-				// Create a closure by capturing the current environment
-				let callable = CallableValue::new_lox(
-					name_token.lexeme,
-					parameters.clone(),
-					body.clone(),
-					RcCell::new((*self.environment).clone()),
-				);
+				let callable =
+					CallableValue::new_lox(name_token.lexeme, parameters.clone(), body.clone(), RcCell::default());
 				let value = Value::Callable(callable);
-				self.environment.define(name_token.lexeme, RcCell::new(value));
+				let value_cell = RcCell::new(value);
+				self.environment.define(name_token.lexeme, value_cell.clone());
+				if let Value::Callable(c) = &mut *value_cell.borrow_mut() {
+					c.closure = RcCell::new((*self.environment).clone());
+				}
 			}
 			Statement::Return(expression) => {
 				let value = if let Some(expression) = expression {
@@ -169,6 +167,21 @@ impl Interpreter {
 		if let Some(outer) = self.environment.outer.take() {
 			self.environment = outer;
 		}
+		result
+	}
+
+	#[inline]
+	fn interpret_block_with_closure(
+		&mut self,
+		statements: &[Statement],
+		new_environment: Environment,
+	) -> Result<(), InterpreterError> {
+		let current_env = std::mem::take(&mut self.environment);
+		*self.environment = new_environment;
+
+		let result = self.interpret_statements(statements);
+
+		self.environment = current_env;
 		result
 	}
 
@@ -323,7 +336,6 @@ impl Interpreter {
 				Ok(match body {
 					CallableType::Native(func) => RcCell::new(func(args)),
 					CallableType::Lox(statements) => {
-						let local_statements = statements.clone();
 						// If we call init on an instance, return the instance directly
 						if name.eq(&"init")
 							&& let Some(instance_value) = closure.borrow().get("this")
@@ -336,7 +348,7 @@ impl Interpreter {
 						for (i, parameter) in parameters.iter().enumerate() {
 							environment.define(parameter.lexeme, args[i].clone());
 						}
-						let ret = match self.interpret_block(&local_statements, environment) {
+						let ret = match self.interpret_block_with_closure(statements, environment) {
 							Ok(_) => Ok(RcCell::new(Value::Nil)),
 							Err(InterpreterError::Return(value)) => Ok(value),
 							Err(e) => Err(e),
