@@ -24,9 +24,7 @@ impl<T> Node<T> {
 }
 
 impl<T> List<T> {
-	pub fn new() -> Self {
-		List { head: None, tail: None }
-	}
+	pub fn new() -> Self { List { head: None, tail: None } }
 
 	pub fn push_front(&mut self, data: T) {
 		let mut new_head = Node::new(data);
@@ -74,13 +72,9 @@ impl<T> List<T> {
 		})
 	}
 
-	pub fn peek_front(&self) -> Option<&T> {
-		self.head.as_ref().map(|node| unsafe { &node.as_ref().data })
-	}
+	pub fn peek_front(&self) -> Option<&T> { self.head.as_ref().map(|node| unsafe { &node.as_ref().data }) }
 
-	pub fn peek_back(&self) -> Option<&T> {
-		self.tail.as_ref().map(|node| unsafe { &node.as_ref().data })
-	}
+	pub fn peek_back(&self) -> Option<&T> { self.tail.as_ref().map(|node| unsafe { &node.as_ref().data }) }
 
 	pub fn peek_back_mut(&mut self) -> Option<&mut T> {
 		self.tail.as_ref().map(|node| unsafe { &mut (*node.as_ptr()).data })
@@ -90,21 +84,15 @@ impl<T> List<T> {
 		self.head.as_ref().map(|node| unsafe { &mut (*node.as_ptr()).data })
 	}
 
-	pub(crate) fn into_iter(self) -> IntoIter<T> {
-		IntoIter(self)
-	}
+	pub(crate) fn into_iter(self) -> IntoIter<T> { IntoIter(self) }
 }
 
 impl<T> Default for List<T> {
-	fn default() -> Self {
-		Self::new()
-	}
+	fn default() -> Self { Self::new() }
 }
 
 impl<T> Drop for List<T> {
-	fn drop(&mut self) {
-		while self.pop_front().is_some() {}
-	}
+	fn drop(&mut self) { while self.pop_front().is_some() {} }
 }
 
 pub struct IntoIter<T>(List<T>);
@@ -112,15 +100,11 @@ pub struct IntoIter<T>(List<T>);
 impl<T> Iterator for IntoIter<T> {
 	type Item = T;
 
-	fn next(&mut self) -> Option<T> {
-		self.0.pop_front()
-	}
+	fn next(&mut self) -> Option<T> { self.0.pop_front() }
 }
 
 impl<T> DoubleEndedIterator for IntoIter<T> {
-	fn next_back(&mut self) -> Option<T> {
-		self.0.pop_back()
-	}
+	fn next_back(&mut self) -> Option<T> { self.0.pop_back() }
 }
 
 #[cfg(test)]

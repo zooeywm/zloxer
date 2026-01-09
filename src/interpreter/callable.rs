@@ -6,20 +6,16 @@ type NativeFunction = Rc<dyn Fn(&[RcCell<Value>]) -> Value>;
 
 /// Native function definitions
 pub mod native {
-    use super::*;
+	use super::*;
 
-    /// Returns the number of seconds since the program started
-    pub fn clock(_args: &[RcCell<Value>]) -> Value {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-        Value::Number(now.as_secs_f64())
-    }
+	/// Returns the number of seconds since the program started
+	pub fn clock(_args: &[RcCell<Value>]) -> Value {
+		let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
+		Value::Number(now.as_secs_f64())
+	}
 
-    /// Returns a list of all native functions
-    pub fn get_all_natives() -> Vec<(&'static str, NativeFunction)> {
-        vec![
-            ("clock", Rc::new(clock)),
-        ]
-    }
+	/// Returns a list of all native functions
+	pub fn get_all_natives() -> Vec<(&'static str, NativeFunction)> { vec![("clock", Rc::new(clock))] }
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +57,7 @@ impl CallableValue {
 			name,
 			parameters: Rc::new(Vec::new()),
 			body: CallableType::Native(func),
-			closure: RcCell::default()
+			closure: RcCell::default(),
 		}
 	}
 }
